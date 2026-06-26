@@ -1,6 +1,6 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import { formatDate, statusLabel, type Match } from '../../lib/helpers';
+import { formatDate, statusLabel, isOpen, type Match } from '../../lib/helpers';
 
 const { supabase, user, profile } = Astro.locals;
 if (!user) return Astro.redirect('/login');
@@ -73,12 +73,22 @@ const def = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().slice(0, 16)
   <section class="mt-8">
     <h2 class="mb-3 text-lg font-bold text-gray-800">Partidos</h2>
     <div class="space-y-3">
-      {matches.map((m) => (
+      {matches.map((m) => {
+        const open = isOpen(m);
+        return (
         <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <div class="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm">
             <span class="font-semibold">{m.home_team} vs {m.away_team}</span>
-            <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
-              {statusLabel[m.status]} · {formatDate(m.match_date)}
+            <span class="flex items-center gap-2">
+              {open ? (
+                <span class="rounded-full bg-polla-green-light px-2 py-0.5 text-xs font-semibold text-polla-green">Pronósticos abiertos</span>
+              ) : (
+                <span class="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-600">Pronósticos cerrados</span>
+              )}
+              {m.force_open === true && <span class="rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700">manual</span>}
+              <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+                {statusLabel[m.status]} · {formatDate(m.match_date)}
+              </span>
             </span>
           </div>
           <form method="POST" action="/api/admin/result" class="flex flex-wrap items-center gap-2">
@@ -94,6 +104,31 @@ const def = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().slice(0, 16)
           </form>
 
           <div class="mt-2 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2 text-sm">
+            {!open ? (
+              <form method="POST" action="/api/admin/toggle-open">
+                <input type="hidden" name="match_id" value={m.id} />
+                <input type="hidden" name="value" value="open" />
+                <button class="rounded-lg bg-polla-green px-4 py-2 font-semibold text-white transition hover:brightness-110">
+                  🔓 Habilitar pronósticos
+                </button>
+              </form>
+            ) : m.force_open === true ? (
+              <form method="POST" action="/api/admin/toggle-open">
+                <input type="hidden" name="match_id" value={m.id} />
+                <input type="hidden" name="value" value="auto" />
+                <button class="rounded-lg border border-yellow-400 bg-yellow-50 px-4 py-2 font-semibold text-yellow-700 transition hover:bg-yellow-100">
+                  ↩ Volver a automático
+                </button>
+              </form>
+            ) : (
+              <form method="POST" action="/api/admin/toggle-open">
+                <input type="hidden" name="match_id" value={m.id} />
+                <input type="hidden" name="value" value="close" />
+                <button class="rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 transition hover:bg-gray-50">
+                  🔒 Cerrar pronósticos
+                </button>
+              </form>
+            )}
             <a href={`/admin/editar/${m.id}`} class="rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 transition hover:bg-gray-50">
               ✎ Editar
             </a>
@@ -109,7 +144,8 @@ const def = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().slice(0, 16)
             </form>
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   </section>
 </Layout>

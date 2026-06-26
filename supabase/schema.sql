@@ -28,6 +28,7 @@ create table if not exists public.matches (
   home_score  int,
   away_score  int,
   external_id text,                         -- id del partido en la API (football-data.org)
+  force_open  boolean,                      -- true=abierto / false=cerrado / null=automático
   created_at  timestamptz not null default now()
 );
 
@@ -203,6 +204,7 @@ create policy predictions_select_visible on public.predictions
     or exists (
       select 1 from public.matches m
       where m.id = match_id
+        and m.force_open is not true
         and (m.status <> 'upcoming' or m.match_date <= now() + interval '5 minutes')
     )
   );
@@ -214,8 +216,14 @@ create policy predictions_insert_own on public.predictions
     and exists (
       select 1 from public.matches m
       where m.id = match_id
-        and m.status = 'upcoming'
-        and m.match_date > now() + interval '5 minutes'
+        and (
+          m.force_open is true
+          or (
+            m.force_open is not false
+            and m.status = 'upcoming'
+            and m.match_date > now() + interval '5 minutes'
+          )
+        )
     )
   );
 
@@ -226,8 +234,14 @@ create policy predictions_update_own on public.predictions
     and exists (
       select 1 from public.matches m
       where m.id = match_id
-        and m.status = 'upcoming'
-        and m.match_date > now() + interval '5 minutes'
+        and (
+          m.force_open is true
+          or (
+            m.force_open is not false
+            and m.status = 'upcoming'
+            and m.match_date > now() + interval '5 minutes'
+          )
+        )
     )
   ) with check (user_id = auth.uid());
 

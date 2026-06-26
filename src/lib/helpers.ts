@@ -8,6 +8,7 @@ export interface Match {
   status: 'upcoming' | 'live' | 'finished';
   home_score: number | null;
   away_score: number | null;
+  force_open?: boolean | null;
 }
 
 export interface Prediction {
@@ -23,6 +24,8 @@ const CLOSE_MS = 5 * 60 * 1000; // 5 minutos antes del inicio
 
 /** ¿Sigue abierto el pronóstico para este partido? */
 export function isOpen(match: Match): boolean {
+  if (match.force_open === true) return true; // habilitado manualmente por el admin
+  if (match.force_open === false) return false; // cerrado a la fuerza
   return match.status === 'upcoming' && new Date(match.match_date).getTime() - CLOSE_MS > Date.now();
 }
 
