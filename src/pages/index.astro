@@ -1,13 +1,17 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { formatDate, statusLabel, type Match } from '../lib/helpers';
+import { formatDate, statusLabel, isOpen, type Match, type Prediction } from '../lib/helpers';
 
 const { supabase, user, profile } = Astro.locals;
+
+const saved = Astro.url.searchParams.get('saved');
+const error = Astro.url.searchParams.get('error');
 
 // Landing para visitantes sin sesión
 let nextMatches: Match[] = [];
 let myRank: number | null = null;
 let myPoints = 0;
+const myPreds = new Map<string, Prediction>();
 
 if (user) {
   const { data } = await supabase
@@ -17,6 +21,15 @@ if (user) {
     .order('match_date', { ascending: true })
     .limit(4);
   nextMatches = (data as Match[]) ?? [];
+
+  if (nextMatches.length) {
+    const { data: predData } = await supabase
+      .from('predictions')
+      .select('*')
+      .eq('user_id', user.id)
+      .in('match_id', nextMatches.map((m) => m.id));
+    for (const p of (predData as Prediction[]) ?? []) myPreds.set(p.match_id, p);
+  }
 
   const { data: board } = await supabase
     .from('leaderboard')
@@ -29,6 +42,8 @@ if (user) {
     }
   }
 }
+
+const anyOpen = nextMatches.some((m) => isOpen(m));
 ---
 
 <Layout title="Inicio · Polla Mundialista">
@@ -75,26 +90,70 @@ if (user) {
       </div>
 
       <div class="mt-8 flex items-center justify-between">
-        <h2 class="text-lg font-bold text-gray-800">Próximos partidos</h2>
+        <h2 class="text-lg font-bold text-gray-800">Hacer pronóstico</h2>
         <a href="/partidos" class="text-sm font-semibold text-polla-blue hover:underline">Ver todos →</a>
       </div>
+      <p class="mt-1 text-sm text-gray-500">
+        Ingresa el marcador de los próximos partidos y guárdalos de una vez.
+      </p>
+
+      {saved && <p class="mt-4 rounded-lg bg-polla-green-light px-4 py-3 text-sm text-polla-green">✅ Pronósticos guardados.</p>}
+      {error && <p class="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
       {nextMatches.length === 0 ? (
         <p class="mt-3 rounded-xl border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500">
           No hay partidos próximos por ahora.
         </p>
       ) : (
-        <div class="mt-3 space-y-2">
-          {nextMatches.map((m) => (
-            <a href="/partidos" class="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition hover:border-polla-blue/40">
-              <div class="font-semibold">{m.home_team} <span class="text-gray-400">vs</span> {m.away_team}</div>
-              <div class="text-right text-xs text-gray-500">
-                <span class="rounded-full bg-polla-blue-light px-2 py-0.5 text-polla-blue">{statusLabel[m.status]}</span>
-                <div class="mt-1">{formatDate(m.match_date)}</div>
+        <form method="POST" action="/api/predictions-batch" class="mt-3 space-y-3">
+          {nextMatches.map((m) => {
+            const pred = myPreds.get(m.id);
+            const open = isOpen(m);
+            return (
+              <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+                    {statusLabel[m.status]} · {formatDate(m.match_date)}
+                  </span>
+                  {!open && <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-400">Cerrado</span>}
+                </div>
+                <div class="mt-3 flex flex-wrap items-center justify-center gap-3 sm:justify-between">
+                  <div class="flex flex-1 items-center justify-end gap-2 text-right font-semibold min-w-[120px]">
+                    {m.home_team}
+                  </div>
+                  <input
+                    type="number" name={`home_${m.id}`} min="0" max="99"
+                    value={pred?.home_score ?? ''}
+                    disabled={!open}
+                    class="w-14 rounded-lg border border-gray-300 px-2 py-2 text-center text-lg font-bold focus:border-polla-blue focus:outline-none focus:ring-2 focus:ring-polla-blue/30 disabled:bg-gray-100 disabled:text-gray-500"
+                    placeholder="-"
+                  />
+                  <span class="font-bold text-gray-400">:</span>
+                  <input
+                    type="number" name={`away_${m.id}`} min="0" max="99"
+                    value={pred?.away_score ?? ''}
+                    disabled={!open}
+                    class="w-14 rounded-lg border border-gray-300 px-2 py-2 text-center text-lg font-bold focus:border-polla-blue focus:outline-none focus:ring-2 focus:ring-polla-blue/30 disabled:bg-gray-100 disabled:text-gray-500"
+                    placeholder="-"
+                  />
+                  <div class="flex flex-1 items-center gap-2 font-semibold min-w-[120px]">
+                    {m.away_team}
+                  </div>
+                </div>
               </div>
-            </a>
-          ))}
-        </div>
+            );
+          })}
+
+          {anyOpen ? (
+            <button class="w-full rounded-lg bg-polla-green px-4 py-3 text-sm font-semibold text-white transition hover:brightness-110">
+              Guardar pronósticos
+            </button>
+          ) : (
+            <p class="rounded-lg bg-gray-100 px-4 py-3 text-center text-sm font-medium text-gray-400">
+              Los pronósticos de estos partidos están cerrados.
+            </p>
+          )}
+        </form>
       )}
     </section>
   )}

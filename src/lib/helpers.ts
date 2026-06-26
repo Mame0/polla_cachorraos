@@ -51,6 +51,11 @@ export function dayKey(iso: string): string {
   return new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ });
 }
 
+/** Clave del día de hoy (YYYY-MM-DD en UTC-5). */
+export function todayKey(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: TZ });
+}
+
 /** Etiqueta de día legible en UTC-5, p. ej. "sáb 28 jun". */
 export function dayLabel(iso: string): string {
   return new Date(iso).toLocaleDateString('es', { weekday: 'short', day: '2-digit', month: 'short', timeZone: TZ });
