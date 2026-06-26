@@ -1,0 +1,110 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import type { Match } from '../../../lib/helpers';
+
+const { supabase, user, profile } = Astro.locals;
+if (!user) return Astro.redirect('/login');
+if (profile?.role !== 'admin') return Astro.redirect('/');
+
+const { id } = Astro.params;
+const { data } = await supabase.from('matches').select('*').eq('id', id).single();
+if (!data) return Astro.redirect('/admin?error=Partido no encontrado');
+const m = data as Match;
+
+const error = Astro.url.searchParams.get('error');
+
+// ISO -> valor para <input type="datetime-local"> en hora local
+function toLocalInput(iso: string): string {
+  const d = new Date(iso);
+  const off = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - off).toISOString().slice(0, 16);
+}
+
+const statuses: { value: Match['status']; label: string }[] = [
+  { value: 'upcoming', label: 'Próximo' },
+  { value: 'live', label: 'En curso' },
+  { value: 'finished', label: 'Finalizado' },
+];
+---
+
+<Layout title="Editar partido · Admin">
+  <a href="/admin" class="text-sm font-semibold text-polla-blue hover:underline">← Volver al panel</a>
+  <h1 class="mt-2 text-2xl font-extrabold text-polla-blue">Editar partido</h1>
+
+  {error && <p class="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+
+  <form method="POST" action="/api/admin/match-update" class="mt-6 grid gap-3 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:grid-cols-2">
+    <input type="hidden" name="match_id" value={m.id} />
+
+    <div>
+      <label class="mb-1 block text-sm font-medium" for="home_team">Equipo local</label>
+      <input id="home_team" name="home_team" required value={m.home_team}
+        class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-polla-blue focus:outline-none focus:ring-2 focus:ring-polla-blue/30" />
+    </div>
+    <div>
+      <label class="mb-1 block text-sm font-medium" for="away_team">Equipo visitante</label>
+      <input id="away_team" name="away_team" required value={m.away_team}
+        class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-polla-blue focus:outline-none focus:ring-2 focus:ring-polla-blue/30" />
+    </div>
+
+    <div>
+      <label class="mb-1 block text-sm font-medium" for="match_date">Fecha y hora</label>
+      <input id="match_date" name="match_date" type="datetime-local" required value={toLocalInput(m.match_date)}
+        class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-polla-blue focus:outline-none focus:ring-2 focus:ring-polla-blue/30" />
+    </div>
+    <div>
+      <label class="mb-1 block text-sm font-medium" for="status">Estado</label>
+      <select id="status" name="status"
+        class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-polla-blue focus:outline-none focus:ring-2 focus:ring-polla-blue/30">
+        {statuses.map((s) => <option value={s.value} selected={m.status === s.value}>{s.label}</option>)}
+      </select>
+    </div>
+
+    <div>
+      <label class="mb-1 block text-sm font-medium" for="stage">Fase</label>
+      <input id="stage" name="stage" value={m.stage}
+        class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-polla-blue focus:outline-none focus:ring-2 focus:ring-polla-blue/30" />
+    </div>
+    <div>
+      <label class="mb-1 block text-sm font-medium" for="round">Jornada (opcional)</label>
+      <input id="round" name="round" value={m.round ?? ''}
+        class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-polla-blue focus:outline-none focus:ring-2 focus:ring-polla-blue/30" />
+    </div>
+
+    <div>
+      <label class="mb-1 block text-sm font-medium" for="home_score">Goles local (resultado real)</label>
+      <input id="home_score" name="home_score" type="number" min="0" max="99" value={m.home_score ?? ''} placeholder="—"
+        class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-polla-blue focus:outline-none focus:ring-2 focus:ring-polla-blue/30" />
+    </div>
+    <div>
+      <label class="mb-1 block text-sm font-medium" for="away_score">Goles visitante (resultado real)</label>
+      <input id="away_score" name="away_score" type="number" min="0" max="99" value={m.away_score ?? ''} placeholder="—"
+        class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-polla-blue focus:outline-none focus:ring-2 focus:ring-polla-blue/30" />
+    </div>
+
+    <p class="text-xs text-gray-500 sm:col-span-2">
+      Deja los goles vacíos si el partido aún no se ha jugado. Al guardar un marcador con estado
+      <strong>Finalizado</strong>, los puntos se recalculan automáticamente.
+    </p>
+
+    <div class="flex gap-3 sm:col-span-2">
+      <button class="rounded-lg bg-polla-green px-5 py-2.5 font-semibold text-white transition hover:brightness-110">
+        Guardar cambios
+      </button>
+      <a href="/admin" class="rounded-lg border border-gray-300 px-5 py-2.5 font-semibold text-gray-700 transition hover:bg-gray-50">
+        Cancelar
+      </a>
+    </div>
+  </form>
+
+  <!-- Eliminar -->
+  <form method="POST" action="/api/admin/match-delete" class="mt-6 rounded-2xl border border-red-200 bg-red-50/50 p-6"
+        onsubmit="return confirm('¿Eliminar este partido? Se borrarán también todos los pronósticos asociados. Esta acción no se puede deshacer.');">
+    <input type="hidden" name="match_id" value={m.id} />
+    <h2 class="text-sm font-bold text-red-700">Zona peligrosa</h2>
+    <p class="mt-1 mb-3 text-sm text-gray-600">Eliminar el partido borra también los pronósticos de los jugadores sobre él.</p>
+    <button class="rounded-lg bg-red-600 px-5 py-2.5 font-semibold text-white transition hover:bg-red-700">
+      Eliminar partido
+    </button>
+  </form>
+</Layout>

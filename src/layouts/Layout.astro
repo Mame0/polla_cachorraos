@@ -1,0 +1,93 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+}
+const { title = 'Polla Mundialista' } = Astro.props;
+
+const { user, profile } = Astro.locals;
+const isAdmin = profile?.role === 'admin';
+const path = Astro.url.pathname;
+
+const navLinks = [
+  { href: '/', label: 'Inicio' },
+  { href: '/partidos', label: 'Partidos' },
+  { href: '/tabla', label: 'Tabla' },
+  { href: '/mis-pronosticos', label: 'Mis pronósticos' },
+];
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Polla Mundialista — pronostica los partidos y compite con tus amigos" />
+    <title>{title}</title>
+  </head>
+  <body class="min-h-screen text-gray-800">
+    <header class="bg-polla-blue text-white shadow-md">
+      <nav class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <a href="/" class="flex items-center gap-2 text-lg font-extrabold tracking-tight">
+          <span class="text-2xl">⚽</span> POLLA <span class="text-polla-gold">MUNDIALISTA</span>
+        </a>
+
+        {user && (
+          <div class="flex flex-wrap items-center gap-1 text-sm">
+            {navLinks.map((link) => (
+              <a
+                href={link.href}
+                class={`rounded-md px-3 py-1.5 transition hover:bg-white/15 ${
+                  path === link.href ? 'bg-white/20 font-semibold' : ''
+                }`}
+              >
+                {link.label}
+              </a>
+            ))}
+            {isAdmin && (
+              <a
+                href="/admin"
+                class={`rounded-md px-3 py-1.5 font-semibold text-polla-gold transition hover:bg-white/15 ${
+                  path.startsWith('/admin') ? 'bg-white/20' : ''
+                }`}
+              >
+                Admin
+              </a>
+            )}
+          </div>
+        )}
+
+        <div class="flex items-center gap-3 text-sm">
+          {user ? (
+            <>
+              <span class="hidden sm:inline opacity-90">
+                Hola, <strong>{profile?.username ?? 'jugador'}</strong>
+              </span>
+              <form method="POST" action="/api/auth/logout">
+                <button class="rounded-md bg-white/15 px-3 py-1.5 font-medium transition hover:bg-white/25">
+                  Salir
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
+              <a href="/login" class="rounded-md px-3 py-1.5 hover:bg-white/15">Entrar</a>
+              <a href="/register" class="rounded-md bg-polla-gold px-3 py-1.5 font-semibold text-polla-blue hover:brightness-95">
+                Registrarse
+              </a>
+            </>
+          )}
+        </div>
+      </nav>
+    </header>
+
+    <main class="mx-auto max-w-5xl px-4 py-8">
+      <slot />
+    </main>
+
+    <footer class="mt-12 border-t border-gray-200 py-6 text-center text-xs text-gray-500">
+      Polla Mundialista · v1.0 · Astro + Supabase
+    </footer>
+  </body>
+</html>

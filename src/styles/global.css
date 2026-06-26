@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@theme {
+  --color-polla-green: #1a5c2a;
+  --color-polla-green-light: #d6f0dd;
+  --color-polla-blue: #1a3c6e;
+  --color-polla-blue-light: #d6e4f7;
+  --color-polla-gold: #ffd700;
+}
+
+html {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  background-color: #f4f6f9;
+}
+
+/* Quita las flechas de los inputs numéricos de marcador */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}

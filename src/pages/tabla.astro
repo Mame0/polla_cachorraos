@@ -1,0 +1,53 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+const { supabase, user } = Astro.locals;
+if (!user) return Astro.redirect('/login?msg=Inicia sesión para ver la tabla');
+
+const { data } = await supabase
+  .from('leaderboard')
+  .select('*');
+const rows = (data as any[]) ?? [];
+
+const medal = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`);
+---
+
+<Layout title="Tabla · Polla Mundialista">
+  <h1 class="text-2xl font-extrabold text-polla-blue">Tabla de posiciones</h1>
+  <p class="mt-1 text-sm text-gray-500">Desempate por mayor cantidad de resultados exactos.</p>
+
+  <div class="mt-6 overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="bg-polla-blue text-left text-white">
+          <th class="px-4 py-3">#</th>
+          <th class="px-4 py-3">Jugador</th>
+          <th class="px-4 py-3 text-center">Pts</th>
+          <th class="px-4 py-3 text-center" title="Resultados exactos">🎯</th>
+          <th class="px-4 py-3 text-center" title="Diferencia correcta">±</th>
+          <th class="px-4 py-3 text-center" title="Ganador correcto">✓</th>
+          <th class="px-4 py-3 text-center">Pron.</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.length === 0 && (
+          <tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">Aún no hay jugadores.</td></tr>
+        )}
+        {rows.map((r, i) => (
+          <tr class={`border-t border-gray-100 ${r.user_id === user.id ? 'bg-polla-green-light/60 font-semibold' : i % 2 ? 'bg-gray-50/50' : ''}`}>
+            <td class="px-4 py-3 text-lg">{medal(i)}</td>
+            <td class="px-4 py-3">
+              {r.username}
+              {r.user_id === user.id && <span class="ml-2 rounded-full bg-polla-green px-2 py-0.5 text-xs text-white">tú</span>}
+            </td>
+            <td class="px-4 py-3 text-center text-lg font-extrabold text-polla-blue">{r.total_points}</td>
+            <td class="px-4 py-3 text-center">{r.correct_exact}</td>
+            <td class="px-4 py-3 text-center">{r.correct_diff}</td>
+            <td class="px-4 py-3 text-center">{r.correct_winner}</td>
+            <td class="px-4 py-3 text-center text-gray-500">{r.total_predictions}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</Layout>

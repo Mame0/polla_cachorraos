@@ -1,0 +1,62 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { formatDate, statusLabel, pointsBadge, type Match } from '../../../lib/helpers';
+
+const { supabase, user, profile } = Astro.locals;
+if (!user) return Astro.redirect('/login');
+if (profile?.role !== 'admin') return Astro.redirect('/');
+
+const { id } = Astro.params;
+
+const { data: match } = await supabase.from('matches').select('*').eq('id', id).single();
+if (!match) return Astro.redirect('/admin?error=Partido no encontrado');
+const m = match as Match;
+
+const { data: preds } = await supabase
+  .from('predictions')
+  .select('home_score, away_score, points_earned, profiles(username)')
+  .eq('match_id', id);
+const rows = ((preds as any[]) ?? []).sort((a, b) => b.points_earned - a.points_earned);
+const finished = m.status === 'finished';
+---
+
+<Layout title="Pronósticos del partido · Admin">
+  <a href="/admin" class="text-sm font-semibold text-polla-blue hover:underline">← Volver al panel</a>
+
+  <h1 class="mt-2 text-2xl font-extrabold text-polla-blue">{m.home_team} vs {m.away_team}</h1>
+  <p class="mt-1 text-sm text-gray-500">
+    {statusLabel[m.status]} · {formatDate(m.match_date)}
+    {finished && <strong class="ml-2 text-gray-700">Resultado: {m.home_score} – {m.away_score}</strong>}
+  </p>
+
+  <div class="mt-6 overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="bg-polla-blue text-left text-white">
+          <th class="px-4 py-3">Jugador</th>
+          <th class="px-4 py-3 text-center">Pronóstico</th>
+          {finished && <th class="px-4 py-3 text-center">Puntos</th>}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.length === 0 && (
+          <tr><td colspan="3" class="px-4 py-8 text-center text-gray-400">Nadie ha pronosticado este partido.</td></tr>
+        )}
+        {rows.map((r, i) => {
+          const badge = finished ? pointsBadge(r.points_earned) : null;
+          return (
+            <tr class={`border-t border-gray-100 ${i % 2 ? 'bg-gray-50/50' : ''}`}>
+              <td class="px-4 py-3 font-medium">{r.profiles?.username ?? '—'}</td>
+              <td class="px-4 py-3 text-center font-bold">{r.home_score} – {r.away_score}</td>
+              {finished && badge && (
+                <td class="px-4 py-3 text-center">
+                  <span class={`rounded-full px-3 py-1 text-xs font-semibold ${badge.classes}`}>{badge.label}</span>
+                </td>
+              )}
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  </div>
+</Layout>

@@ -1,0 +1,46 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+if (Astro.locals.user) return Astro.redirect('/');
+
+const error = Astro.url.searchParams.get('error');
+---
+
+<Layout title="Registro · Polla Mundialista">
+  <div class="mx-auto max-w-md">
+    <div class="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+      <h1 class="mb-1 text-2xl font-extrabold text-polla-blue">Crear cuenta</h1>
+      <p class="mb-6 text-sm text-gray-500">Únete a la polla y compite con tu grupo.</p>
+
+      {error && (
+        <p class="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+      )}
+
+      <form method="POST" action="/api/auth/register" class="space-y-4">
+        <div>
+          <label class="mb-1 block text-sm font-medium" for="username">Nombre de usuario</label>
+          <input id="username" name="username" type="text" required minlength="3" maxlength="20"
+            class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-polla-blue focus:outline-none focus:ring-2 focus:ring-polla-blue/30" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium" for="email">Email</label>
+          <input id="email" name="email" type="email" required autocomplete="email"
+            class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-polla-blue focus:outline-none focus:ring-2 focus:ring-polla-blue/30" />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium" for="password">Contraseña (mín. 8)</label>
+          <input id="password" name="password" type="password" required minlength="8" autocomplete="new-password"
+            class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-polla-blue focus:outline-none focus:ring-2 focus:ring-polla-blue/30" />
+        </div>
+        <button class="w-full rounded-lg bg-polla-green py-2.5 font-semibold text-white transition hover:brightness-110">
+          Crear cuenta
+        </button>
+      </form>
+
+      <p class="mt-6 text-center text-sm text-gray-500">
+        ¿Ya tienes cuenta?
+        <a href="/login" class="font-semibold text-polla-blue hover:underline">Inicia sesión</a>
+      </p>
+    </div>
+  </div>
+</Layout>

@@ -1,0 +1,21 @@
+{
+  "name": "polla-mundialista",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Polla Mundialista - Astro + Supabase",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "sync": "node --env-file=.env scripts/sync-fixture.mjs",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/node": "^9.1.3",
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.45.4",
+    "@tailwindcss/vite": "^4.0.0",
+    "astro": "^5.2.5",
+    "tailwindcss": "^4.0.0"
+  }
+}
