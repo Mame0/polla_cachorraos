@@ -1,4 +1,5 @@
 import type { APIRoute } from 'astro';
+import { localInputToISO } from '../../../lib/helpers';
 
 export const prerender = false;
 
@@ -20,7 +21,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const { error } = await supabase.from('matches').insert({
     home_team,
     away_team,
-    match_date: new Date(match_date).toISOString(),
+    match_date: localInputToISO(match_date),
     stage,
     round,
     status: 'upcoming',

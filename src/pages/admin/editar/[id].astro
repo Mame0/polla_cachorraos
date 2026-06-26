@@ -1,6 +1,6 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
-import type { Match } from '../../../lib/helpers';
+import { isoToLocalInput, type Match } from '../../../lib/helpers';
 
 const { supabase, user, profile } = Astro.locals;
 if (!user) return Astro.redirect('/login');
@@ -12,13 +12,6 @@ if (!data) return Astro.redirect('/admin?error=Partido no encontrado');
 const m = data as Match;
 
 const error = Astro.url.searchParams.get('error');
-
-// ISO -> valor para <input type="datetime-local"> en hora local
-function toLocalInput(iso: string): string {
-  const d = new Date(iso);
-  const off = d.getTimezoneOffset() * 60000;
-  return new Date(d.getTime() - off).toISOString().slice(0, 16);
-}
 
 const statuses: { value: Match['status']; label: string }[] = [
   { value: 'upcoming', label: 'Próximo' },
@@ -49,7 +42,7 @@ const statuses: { value: Match['status']; label: string }[] = [
 
     <div>
       <label class="mb-1 block text-sm font-medium" for="match_date">Fecha y hora</label>
-      <input id="match_date" name="match_date" type="datetime-local" required value={toLocalInput(m.match_date)}
+      <input id="match_date" name="match_date" type="datetime-local" required value={isoToLocalInput(m.match_date)}
         class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-polla-blue focus:outline-none focus:ring-2 focus:ring-polla-blue/30" />
     </div>
     <div>

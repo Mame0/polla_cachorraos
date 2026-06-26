@@ -22,6 +22,22 @@ export interface Prediction {
 
 const CLOSE_MS = 5 * 60 * 1000; // 5 minutos antes del inicio
 
+// La app muestra y captura horarios en UTC-5.
+// 'America/Bogota' es UTC-5 de forma permanente (sin horario de verano).
+export const TZ = 'America/Bogota';
+const TZ_OFFSET = '-05:00';
+
+/** Convierte el valor de un <input datetime-local> (interpretado como UTC-5) a ISO/UTC. */
+export function localInputToISO(value: string): string {
+  return new Date(`${value}:00${TZ_OFFSET}`).toISOString();
+}
+
+/** Convierte una fecha ISO/UTC al formato 'YYYY-MM-DDTHH:mm' de un <input datetime-local> en UTC-5. */
+export function isoToLocalInput(iso: string): string {
+  const shifted = new Date(new Date(iso).getTime() - 5 * 60 * 60 * 1000);
+  return shifted.toISOString().slice(0, 16);
+}
+
 /** ¿Sigue abierto el pronóstico para este partido? */
 export function isOpen(match: Match): boolean {
   if (match.force_open === true) return true; // habilitado manualmente por el admin
@@ -29,17 +45,15 @@ export function isOpen(match: Match): boolean {
   return match.status === 'upcoming' && new Date(match.match_date).getTime() - CLOSE_MS > Date.now();
 }
 
-/** Clave de día estable (YYYY-MM-DD en hora local) para agrupar/filtrar. */
+/** Clave de día estable (YYYY-MM-DD en UTC-5) para agrupar/filtrar. */
 export function dayKey(iso: string): string {
-  const d = new Date(iso);
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
+  // en-CA produce el formato YYYY-MM-DD
+  return new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ });
 }
 
-/** Etiqueta de día legible, p. ej. "sáb 28 jun". */
+/** Etiqueta de día legible en UTC-5, p. ej. "sáb 28 jun". */
 export function dayLabel(iso: string): string {
-  return new Date(iso).toLocaleDateString('es', { weekday: 'short', day: '2-digit', month: 'short' });
+  return new Date(iso).toLocaleDateString('es', { weekday: 'short', day: '2-digit', month: 'short', timeZone: TZ });
 }
 
 /** Lista ordenada de días distintos a partir de fechas ISO. */
@@ -61,6 +75,7 @@ export function formatDate(iso: string): string {
     month: 'short',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: TZ,
   });
 }
 

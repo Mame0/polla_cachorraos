@@ -1,6 +1,6 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import { formatDate, statusLabel, isOpen, type Match } from '../../lib/helpers';
+import { formatDate, statusLabel, isOpen, isoToLocalInput, type Match } from '../../lib/helpers';
 
 const { supabase, user, profile } = Astro.locals;
 if (!user) return Astro.redirect('/login');
@@ -14,8 +14,8 @@ const matches = (data as Match[]) ?? [];
 
 const pending = matches.filter((m) => m.status !== 'finished').length;
 
-// valor por defecto para datetime-local (ahora + 2h)
-const def = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().slice(0, 16);
+// valor por defecto para datetime-local (ahora + 2h, en UTC-5)
+const def = isoToLocalInput(new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString());
 ---
 
 <Layout title="Admin · Polla Mundialista">
