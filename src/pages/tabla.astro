@@ -1,20 +1,94 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import { dayKey, distinctDays } from '../lib/helpers';
 
 const { supabase, user } = Astro.locals;
 if (!user) return Astro.redirect('/login?msg=Inicia sesión para ver la tabla');
 
-const { data } = await supabase
-  .from('leaderboard')
-  .select('*');
-const rows = (data as any[]) ?? [];
+const selectedDay = Astro.url.searchParams.get('dia');
+
+// --- Días disponibles (a partir de los partidos finalizados) ---
+const { data: matchData } = await supabase
+  .from('matches')
+  .select('match_date, status')
+  .eq('status', 'finished')
+  .order('match_date', { ascending: true });
+const days = distinctDays(((matchData as any[]) ?? []).map((m) => m.match_date));
+
+type Row = {
+  user_id: string;
+  username: string;
+  total_points: number;
+  correct_exact: number;
+  correct_diff: number;
+  correct_winner: number;
+  total_predictions: number;
+};
+
+let rows: Row[] = [];
+
+if (!selectedDay) {
+  // --- Tabla histórica (vista leaderboard) ---
+  const { data } = await supabase.from('leaderboard').select('*');
+  rows = (data as Row[]) ?? [];
+} else {
+  // --- Tabla del día: sumar puntos de los partidos finalizados de ese día ---
+  const { data } = await supabase
+    .from('predictions')
+    .select('user_id, points_earned, profiles(username), matches(match_date, status)');
+
+  const acc = new Map<string, Row>();
+  for (const p of (data as any[]) ?? []) {
+    const m = p.matches;
+    if (!m || m.status !== 'finished' || dayKey(m.match_date) !== selectedDay) continue;
+    const id = p.user_id;
+    const cur = acc.get(id) ?? {
+      user_id: id,
+      username: p.profiles?.username ?? '—',
+      total_points: 0,
+      correct_exact: 0,
+      correct_diff: 0,
+      correct_winner: 0,
+      total_predictions: 0,
+    };
+    cur.total_points += p.points_earned;
+    if (p.points_earned === 5) cur.correct_exact++;
+    else if (p.points_earned === 3) cur.correct_diff++;
+    else if (p.points_earned === 2) cur.correct_winner++;
+    cur.total_predictions++;
+    acc.set(id, cur);
+  }
+  rows = [...acc.values()].sort(
+    (a, b) => b.total_points - a.total_points || b.correct_exact - a.correct_exact
+  );
+}
 
 const medal = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`);
+const dayLabelSel = selectedDay ? days.find((d) => d.key === selectedDay)?.label : null;
 ---
 
 <Layout title="Tabla · Polla Mundialista">
   <h1 class="text-2xl font-extrabold text-polla-blue">Tabla de posiciones</h1>
-  <p class="mt-1 text-sm text-gray-500">Desempate por mayor cantidad de resultados exactos.</p>
+  <p class="mt-1 text-sm text-gray-500">
+    {selectedDay
+      ? `Clasificación del día ${dayLabelSel ?? ''}.`
+      : 'Histórica · desempate por mayor cantidad de resultados exactos.'}
+  </p>
+
+  {days.length > 0 && (
+    <div class="mt-4 flex flex-wrap gap-2">
+      <a href="/tabla"
+        class={`rounded-full px-3 py-1.5 text-sm font-medium transition ${!selectedDay ? 'bg-polla-blue text-white' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}`}>
+        🏆 Histórica
+      </a>
+      {days.map((d) => (
+        <a href={`/tabla?dia=${d.key}`}
+          class={`rounded-full px-3 py-1.5 text-sm font-medium capitalize transition ${selectedDay === d.key ? 'bg-polla-blue text-white' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}`}>
+          {d.label}
+        </a>
+      ))}
+    </div>
+  )}
 
   <div class="mt-6 overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
     <table class="w-full text-sm">
@@ -31,7 +105,9 @@ const medal = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '�
       </thead>
       <tbody>
         {rows.length === 0 && (
-          <tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">Aún no hay jugadores.</td></tr>
+          <tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">
+            {selectedDay ? 'Sin resultados para este día todavía.' : 'Aún no hay jugadores.'}
+          </td></tr>
         )}
         {rows.map((r, i) => (
           <tr class={`border-t border-gray-100 ${r.user_id === user.id ? 'bg-polla-green-light/60 font-semibold' : i % 2 ? 'bg-gray-50/50' : ''}`}>

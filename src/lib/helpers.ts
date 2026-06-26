@@ -29,6 +29,31 @@ export function isOpen(match: Match): boolean {
   return match.status === 'upcoming' && new Date(match.match_date).getTime() - CLOSE_MS > Date.now();
 }
 
+/** Clave de día estable (YYYY-MM-DD en hora local) para agrupar/filtrar. */
+export function dayKey(iso: string): string {
+  const d = new Date(iso);
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/** Etiqueta de día legible, p. ej. "sáb 28 jun". */
+export function dayLabel(iso: string): string {
+  return new Date(iso).toLocaleDateString('es', { weekday: 'short', day: '2-digit', month: 'short' });
+}
+
+/** Lista ordenada de días distintos a partir de fechas ISO. */
+export function distinctDays(isos: string[]): { key: string; label: string }[] {
+  const map = new Map<string, string>();
+  for (const iso of isos) {
+    const k = dayKey(iso);
+    if (!map.has(k)) map.set(k, dayLabel(iso));
+  }
+  return [...map.entries()]
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .map(([key, label]) => ({ key, label }));
+}
+
 export function formatDate(iso: string): string {
   return new Date(iso).toLocaleString('es', {
     weekday: 'short',
