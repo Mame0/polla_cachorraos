@@ -92,6 +92,83 @@ function computeRanking(matchIds: Set<string>): Row[] {
 const finishedIds = new Set(finishedMatches.map((m) => m.id));
 const ranking = computeRanking(finishedIds);
 
+// --- Probabilidad de ganar (simulación Monte Carlo sobre partidos pendientes) ---
+// Usa los pronósticos ACTUALES de cada miembro; si no pronosticó, suma 0 en ese partido.
+const pendingMatches = matches.filter((m) => m.status !== 'finished');
+const hasPending = pendingMatches.length > 0;
+const winPct = new Map<string, number>();
+
+if (hasPending) {
+  // Pronóstico actual por (partido, usuario).
+  const predByMatch = new Map<string, Map<string, { h: number; a: number }>>();
+  for (const p of allPreds) {
+    if (!predByMatch.has(p.match_id)) predByMatch.set(p.match_id, new Map());
+    predByMatch.get(p.match_id)!.set(p.user_id, { h: p.home_score, a: p.away_score });
+  }
+
+  // Puntos de un pronóstico vs un resultado (misma fórmula que la BD).
+  const pts = (ph: number, pa: number, ah: number, aa: number): number => {
+    if (ph === ah && pa === aa) return 5;
+    if (ph - pa === ah - aa) return 3;
+    if (Math.sign(ph - pa) === Math.sign(ah - aa)) return 2;
+    return 0;
+  };
+
+  // Goles ~ Poisson(λ) por equipo (marcadores de fútbol realistas).
+  const poisson = (lambda: number): number => {
+    const L = Math.exp(-lambda);
+    let k = 0, p = 1;
+    do { k++; p *= Math.random(); } while (p > L);
+    return k - 1;
+  };
+
+  const N = 10000;
+  const LAMBDA = 1.35;
+  const base = new Map(ranking.map((r) => [r.user_id, { pts: r.total_points, exact: r.correct_exact }]));
+  const credit = new Map(ranking.map((r) => [r.user_id, 0]));
+
+  for (let s = 0; s < N; s++) {
+    const fp = new Map<string, number>();
+    const fe = new Map<string, number>();
+    for (const r of ranking) {
+      const b = base.get(r.user_id)!;
+      fp.set(r.user_id, b.pts);
+      fe.set(r.user_id, b.exact);
+    }
+    for (const m of pendingMatches) {
+      const ah = poisson(LAMBDA);
+      const aa = poisson(LAMBDA);
+      const preds = predByMatch.get(m.id);
+      if (!preds) continue;
+      for (const [uid, pr] of preds) {
+        if (!fp.has(uid)) continue;
+        const g = pts(pr.h, pr.a, ah, aa);
+        fp.set(uid, fp.get(uid)! + g);
+        if (g === 5) fe.set(uid, fe.get(uid)! + 1);
+      }
+    }
+    // Ganador(es) de la simulación: más puntos, desempate por exactos.
+    let bestP = -1, bestE = -1;
+    for (const r of ranking) {
+      const p = fp.get(r.user_id)!, e = fe.get(r.user_id)!;
+      if (p > bestP || (p === bestP && e > bestE)) { bestP = p; bestE = e; }
+    }
+    const winners = ranking.filter((r) => fp.get(r.user_id) === bestP && fe.get(r.user_id) === bestE);
+    const share = 1 / winners.length;
+    for (const w of winners) credit.set(w.user_id, credit.get(w.user_id)! + share);
+  }
+
+  for (const r of ranking) winPct.set(r.user_id, (credit.get(r.user_id)! / N) * 100);
+}
+
+// Formatea el porcentaje: 0%, <1% o redondeado.
+const fmtPct = (v: number | undefined): string => {
+  if (v === undefined) return '—';
+  if (v === 0) return '0%';
+  if (v < 1) return '<1%';
+  return Math.round(v) + '%';
+};
+
 const anyOpen = matches.some((m) => isOpen(m));
 const medal = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`);
 ---
@@ -271,6 +348,7 @@ const medal = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '�
     <div class="mt-1 flex flex-wrap items-center justify-between gap-2">
       <p class="text-sm text-gray-500">
         Puntos acumulados sobre los {finishedMatches.length} partidos finalizados · desempate por exactos.
+        {hasPending && ' El % es la probabilidad estimada de quedar 1ro según los pronósticos actuales (0% = ya no puede ganar).'}
       </p>
       {allFinished && ranking.length > 0 && (
         <span class="rounded-full bg-polla-gold px-3 py-1 text-xs font-bold text-polla-blue">
@@ -288,13 +366,16 @@ const medal = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '�
             <th class="px-4 py-3 text-center">Pts</th>
             <th class="px-4 py-3 text-center" title="Resultados exactos">🎯</th>
             <th class="px-4 py-3 text-center">Pron.</th>
+            {hasPending && <th class="px-4 py-3 text-center" title="Probabilidad estimada de quedar 1ro">% ganar</th>}
           </tr>
         </thead>
         <tbody>
           {ranking.length === 0 && (
-            <tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">Aún no hay participantes.</td></tr>
+            <tr><td colspan={hasPending ? 6 : 5} class="px-4 py-8 text-center text-gray-400">Aún no hay participantes.</td></tr>
           )}
-          {ranking.map((r, i) => (
+          {ranking.map((r, i) => {
+            const pct = winPct.get(r.user_id);
+            return (
             <tr class={`border-t border-gray-100 ${r.user_id === user.id ? 'bg-polla-green-light/60 font-semibold' : i % 2 ? 'bg-gray-50/50' : ''}`}>
               <td class="px-4 py-3 text-lg">{medal(i)}</td>
               <td class="px-4 py-3">
@@ -304,8 +385,14 @@ const medal = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '�
               <td class="px-4 py-3 text-center text-lg font-extrabold text-polla-blue">{r.total_points}</td>
               <td class="px-4 py-3 text-center">{r.correct_exact}</td>
               <td class="px-4 py-3 text-center text-gray-500">{r.total_predictions}</td>
+              {hasPending && (
+                <td class={`px-4 py-3 text-center font-semibold ${pct === 0 ? 'text-gray-400' : pct && pct >= 50 ? 'text-polla-green' : 'text-gray-700'}`}>
+                  {fmtPct(pct)}
+                </td>
+              )}
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

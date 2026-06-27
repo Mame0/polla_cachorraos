@@ -1,32 +1,25 @@
 import type { APIRoute } from 'astro';
-import { createClient } from '@supabase/supabase-js';
 import { fetchFixture } from '../../lib/fixture';
 
 export const prerender = false;
 
-// Lee variables tanto del build (import.meta.env) como del runtime (process.env).
-function env(key: string): string | undefined {
-  return (import.meta.env as Record<string, string | undefined>)[key] ?? process.env[key];
-}
-
 // Sincroniza resultados desde football-data.org. Disponible para cualquier
-// usuario con sesión (no solo admin): la tabla `matches` es global y el upsert
-// es idempotente, así que cualquier miembro puede refrescar los marcadores.
+// usuario con sesión: escribe usando la sesión del propio usuario (las
+// políticas RLS matches_sync_insert / matches_sync_update lo permiten),
+// así que NO requiere la service_role key.
 export const POST: APIRoute = async ({ request, locals }) => {
-  const { user } = locals;
+  const { user, supabase } = locals;
   const form = await request.formData();
   const pollId = String(form.get('poll_id') ?? '');
   const back = pollId ? `/polla/${pollId}` : '/';
 
   if (!user) return redirect('/login');
 
-  const token = env('FOOTBALL_DATA_TOKEN');
-  const competition = env('FOOTBALL_COMPETITION') || 'WC';
-  const url = env('PUBLIC_SUPABASE_URL');
-  const key = env('SUPABASE_SERVICE_ROLE_KEY');
+  const token = import.meta.env.FOOTBALL_DATA_TOKEN;
+  const competition = import.meta.env.FOOTBALL_COMPETITION || 'WC';
 
-  if (!token || !url || !key) {
-    return redirect(back + '?error=' + encodeURIComponent('Falta configuración del servidor (token o keys).'));
+  if (!token) {
+    return redirect(back + '?error=' + encodeURIComponent('Falta FOOTBALL_DATA_TOKEN en el servidor.'));
   }
 
   let rows;
@@ -40,7 +33,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return redirect(back + '?saved=' + encodeURIComponent('La API no devolvió partidos.'));
   }
 
-  const supabase = createClient(url, key, { auth: { persistSession: false } });
+  // Upsert idempotente por external_id. Al cambiar marcador/estado, el trigger
+  // de la base de datos recalcula los puntos automáticamente.
   const { error } = await supabase.from('matches').upsert(rows, { onConflict: 'external_id' });
 
   if (error) {
