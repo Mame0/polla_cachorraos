@@ -2,8 +2,9 @@
 import Layout from '../../layouts/Layout.astro';
 import { isOpen, formatDate, statusLabel, pointsBadge, pot, formatMoney, dayKey, distinctDays, todayKey, type Match, type Prediction, type Poll } from '../../lib/helpers';
 
-const { supabase, user } = Astro.locals;
+const { supabase, user, profile } = Astro.locals;
 if (!user) return Astro.redirect('/login?msg=Inicia sesión para ver la polla');
+const isAdmin = profile?.role === 'admin';
 
 const { id } = Astro.params;
 const saved = Astro.url.searchParams.get('saved');
@@ -61,6 +62,13 @@ const allPreds = (predData as any[]) ?? [];
 const myPreds = new Map<string, Prediction>();
 for (const p of allPreds) if (p.user_id === user.id) myPreds.set(p.match_id, p as Prediction);
 
+// Pronósticos visibles por jugador (la RLS ya oculta los de partidos aún abiertos de otros).
+const predsByUser = new Map<string, Map<string, { h: number; a: number; pts: number }>>();
+for (const p of allPreds) {
+  if (!predsByUser.has(p.user_id)) predsByUser.set(p.user_id, new Map());
+  predsByUser.get(p.user_id)!.set(p.match_id, { h: p.home_score, a: p.away_score, pts: p.points_earned });
+}
+
 // --- Ranking: sumar puntos por jugador sobre un conjunto de partidos ---
 type Row = { user_id: string; username: string; total_points: number; correct_exact: number; total_predictions: number };
 function computeRanking(matchIds: Set<string>): Row[] {
@@ -106,6 +114,10 @@ if (hasPending) {
     predByMatch.get(p.match_id)!.set(p.user_id, { h: p.home_score, a: p.away_score });
   }
 
+  // ¿El partido sigue abierto? Si lo está, quien no pronosticó aún puede hacerlo,
+  // así que no se le congela (se simula también una predicción suya).
+  const openByMatch = new Map(pendingMatches.map((m) => [m.id, isOpen(m)]));
+
   // Puntos de un pronóstico vs un resultado (misma fórmula que la BD).
   const pts = (ph: number, pa: number, ah: number, aa: number): number => {
     if (ph === ah && pa === aa) return 5;
@@ -139,12 +151,16 @@ if (hasPending) {
       const ah = poisson(LAMBDA);
       const aa = poisson(LAMBDA);
       const preds = predByMatch.get(m.id);
-      if (!preds) continue;
-      for (const [uid, pr] of preds) {
-        if (!fp.has(uid)) continue;
+      const open = openByMatch.get(m.id);
+      for (const r of ranking) {
+        let pr = preds?.get(r.user_id);
+        if (!pr) {
+          if (!open) continue; // partido cerrado sin pronóstico => 0 puntos
+          pr = { h: poisson(LAMBDA), a: poisson(LAMBDA) }; // abierto: aún puede pronosticar
+        }
         const g = pts(pr.h, pr.a, ah, aa);
-        fp.set(uid, fp.get(uid)! + g);
-        if (g === 5) fe.set(uid, fe.get(uid)! + 1);
+        fp.set(r.user_id, fp.get(r.user_id)! + g);
+        if (g === 5) fe.set(r.user_id, fe.get(r.user_id)! + 1);
       }
     }
     // Ganador(es) de la simulación: más puntos, desempate por exactos.
@@ -367,11 +383,12 @@ const medal = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '�
             <th class="px-4 py-3 text-center" title="Resultados exactos">🎯</th>
             <th class="px-4 py-3 text-center">Pron.</th>
             {hasPending && <th class="px-4 py-3 text-center" title="Probabilidad estimada de quedar 1ro">% ganar</th>}
+            <th class="px-4 py-3 text-center">Ver</th>
           </tr>
         </thead>
         <tbody>
           {ranking.length === 0 && (
-            <tr><td colspan={hasPending ? 6 : 5} class="px-4 py-8 text-center text-gray-400">Aún no hay participantes.</td></tr>
+            <tr><td colspan={hasPending ? 7 : 6} class="px-4 py-8 text-center text-gray-400">Aún no hay participantes.</td></tr>
           )}
           {ranking.map((r, i) => {
             const pct = winPct.get(r.user_id);
@@ -390,12 +407,60 @@ const medal = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '�
                   {fmtPct(pct)}
                 </td>
               )}
+              <td class="px-4 py-3 text-center">
+                <button type="button" data-preds={r.user_id} title={`Ver pronósticos de ${r.username}`} aria-label="Ver pronósticos"
+                  class="text-base text-gray-400 transition hover:text-polla-blue">👁</button>
+              </td>
             </tr>
             );
           })}
         </tbody>
       </table>
     </div>
+
+    {/* Modales: pronósticos de cada jugador en esta polla */}
+    {ranking.map((r) => (
+      <dialog id={`preds-${r.user_id}`} class="fixed left-1/2 top-1/2 m-0 -translate-x-1/2 -translate-y-1/2 rounded-2xl p-0 backdrop:bg-black/50">
+        <div class="w-[32rem] max-w-[92vw] p-6">
+          <div class="flex items-center justify-between gap-2">
+            <h3 class="text-lg font-bold text-polla-blue">Pronósticos de {r.username}</h3>
+            <button type="button" class="preds-close rounded-lg bg-gray-100 px-3 py-1 text-sm font-semibold text-gray-600 transition hover:bg-gray-200">✕</button>
+          </div>
+          <div class="mt-4 overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left text-gray-400">
+                  <th class="py-1 pr-2">Partido</th>
+                  <th class="py-1 text-center">Pron.</th>
+                  <th class="py-1 text-center">Resultado</th>
+                  <th class="py-1 text-center">Pts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {matches.map((m) => {
+                  const pr = predsByUser.get(r.user_id)?.get(m.id);
+                  const finished = m.status === 'finished';
+                  const hidden = !pr && isOpen(m) && r.user_id !== user.id && !isAdmin;
+                  return (
+                    <tr class="border-t border-gray-100">
+                      <td class="py-2 pr-2">{m.home_team} <span class="text-gray-400">vs</span> {m.away_team}</td>
+                      <td class="py-2 text-center font-semibold">
+                        {pr ? `${pr.h} - ${pr.a}` : <span class="text-gray-400">{hidden ? '🔒 oculto' : '—'}</span>}
+                      </td>
+                      <td class="py-2 text-center text-gray-600">{finished ? `${m.home_score} - ${m.away_score}` : '—'}</td>
+                      <td class="py-2 text-center">{pr && finished ? <span class="font-semibold text-polla-blue">{pr.pts}</span> : '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <button type="button" class="preds-close mt-5 w-full rounded-lg bg-gray-100 px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-200">
+            Cerrar
+          </button>
+        </div>
+      </dialog>
+    ))}
   </section>
 
   <script is:inline>
@@ -425,6 +490,20 @@ const medal = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '�
 
       if (filter) filter.addEventListener('change', filterCards);
       filterCards();
+    })();
+
+    // Modales de pronósticos por jugador.
+    (() => {
+      document.querySelectorAll('[data-preds]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const d = document.getElementById('preds-' + btn.getAttribute('data-preds'));
+          if (d && d.showModal) d.showModal();
+        });
+      });
+      document.querySelectorAll('dialog[id^="preds-"]').forEach((d) => {
+        d.querySelectorAll('.preds-close').forEach((c) => c.addEventListener('click', () => d.close()));
+        d.addEventListener('click', (e) => { if (e.target === d) d.close(); });
+      });
     })();
   </script>
 </Layout>
