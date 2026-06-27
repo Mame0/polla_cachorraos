@@ -88,23 +88,9 @@ function computeRanking(matchIds: Set<string>): Row[] {
   );
 }
 
-// Ranking histórico: sobre todos los partidos finalizados.
+// Ranking acumulado de la polla: sobre todos los partidos finalizados.
 const finishedIds = new Set(finishedMatches.map((m) => m.id));
 const ranking = computeRanking(finishedIds);
-
-// Rankings diarios: agrupados por día (UTC-5) sobre los partidos finalizados de cada día.
-const finishedByDay = new Map<string, Set<string>>();
-for (const m of finishedMatches) {
-  const k = dayKey(m.match_date);
-  if (!finishedByDay.has(k)) finishedByDay.set(k, new Set());
-  finishedByDay.get(k)!.add(m.id);
-}
-const dailyRankings = matchDays.map((d) => ({
-  key: d.key,
-  label: d.label,
-  finishedCount: finishedByDay.get(d.key)?.size ?? 0,
-  ranking: computeRanking(finishedByDay.get(d.key) ?? new Set<string>()),
-}));
 
 const anyOpen = matches.some((m) => isOpen(m));
 const medal = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`);
@@ -270,107 +256,59 @@ const medal = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '�
     </section>
   )}
 
-  {/* --- Tabla de la polla (diaria / histórica) --- */}
-  <section id="tabla-section" class="mt-10" data-today={today} data-default-day={defaultDay}>
+  {/* --- Tabla de la polla (acumulada) --- */}
+  <section class="mt-10">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <h2 class="text-lg font-bold text-gray-800">Tabla de la polla</h2>
-      <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 text-sm">
-        <button type="button" data-mode="diaria" class="table-tab rounded-md px-3 py-1 font-medium text-gray-500 transition">Diaria</button>
-        <button type="button" data-mode="historica" class="table-tab rounded-md px-3 py-1 font-medium text-gray-500 transition">Histórica</button>
-      </div>
+      <form method="POST" action="/api/sync">
+        <input type="hidden" name="poll_id" value={poll.id} />
+        <button class="inline-flex items-center gap-1 rounded-lg border border-polla-blue/40 bg-polla-blue-light px-3 py-1 text-sm font-semibold text-polla-blue transition hover:brightness-105">
+          ⟳ Actualizar resultados
+        </button>
+      </form>
     </div>
 
-    {/* Vista histórica */}
-    <div id="view-historica" class="table-view">
-      <div class="mt-1 flex flex-wrap items-center justify-between gap-2">
-        <p class="text-sm text-gray-500">
-          Puntos sobre los {finishedMatches.length} partidos finalizados · desempate por exactos.
-        </p>
-        {allFinished && ranking.length > 0 && (
-          <span class="rounded-full bg-polla-gold px-3 py-1 text-xs font-bold text-polla-blue">
-            🏆 Ganador: {ranking[0].username}
-          </span>
-        )}
-      </div>
-
-      <div class="mt-4 overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="bg-polla-blue text-left text-white">
-              <th class="px-4 py-3">#</th>
-              <th class="px-4 py-3">Jugador</th>
-              <th class="px-4 py-3 text-center">Pts</th>
-              <th class="px-4 py-3 text-center" title="Resultados exactos">🎯</th>
-              <th class="px-4 py-3 text-center">Pron.</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ranking.length === 0 && (
-              <tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">Aún no hay participantes.</td></tr>
-            )}
-            {ranking.map((r, i) => (
-              <tr class={`border-t border-gray-100 ${r.user_id === user.id ? 'bg-polla-green-light/60 font-semibold' : i % 2 ? 'bg-gray-50/50' : ''}`}>
-                <td class="px-4 py-3 text-lg">{medal(i)}</td>
-                <td class="px-4 py-3">
-                  {r.username}
-                  {r.user_id === user.id && <span class="ml-2 rounded-full bg-polla-green px-2 py-0.5 text-xs text-white">tú</span>}
-                </td>
-                <td class="px-4 py-3 text-center text-lg font-extrabold text-polla-blue">{r.total_points}</td>
-                <td class="px-4 py-3 text-center">{r.correct_exact}</td>
-                <td class="px-4 py-3 text-center text-gray-500">{r.total_predictions}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <div class="mt-1 flex flex-wrap items-center justify-between gap-2">
+      <p class="text-sm text-gray-500">
+        Puntos acumulados sobre los {finishedMatches.length} partidos finalizados · desempate por exactos.
+      </p>
+      {allFinished && ranking.length > 0 && (
+        <span class="rounded-full bg-polla-gold px-3 py-1 text-xs font-bold text-polla-blue">
+          🏆 Ganador: {ranking[0].username}
+        </span>
+      )}
     </div>
 
-    {/* Vistas diarias (una por día) */}
-    {dailyRankings.map((d) => (
-      <div class="table-view daily-view" data-day={d.key} hidden>
-        <div class="mt-1 flex flex-wrap items-center justify-between gap-2">
-          <p class="text-sm text-gray-500">
-            Puntos del {d.label} · {d.finishedCount} {d.finishedCount === 1 ? 'partido finalizado' : 'partidos finalizados'}.
-          </p>
-          {d.finishedCount > 0 && d.ranking[0]?.total_points > 0 && (
-            <span class="rounded-full bg-polla-gold px-3 py-1 text-xs font-bold text-polla-blue">
-              🥇 Líder del día: {d.ranking[0].username}
-            </span>
+    <div class="mt-4 overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="bg-polla-blue text-left text-white">
+            <th class="px-4 py-3">#</th>
+            <th class="px-4 py-3">Jugador</th>
+            <th class="px-4 py-3 text-center">Pts</th>
+            <th class="px-4 py-3 text-center" title="Resultados exactos">🎯</th>
+            <th class="px-4 py-3 text-center">Pron.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ranking.length === 0 && (
+            <tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">Aún no hay participantes.</td></tr>
           )}
-        </div>
-
-        <div class="mt-4 overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="bg-polla-blue text-left text-white">
-                <th class="px-4 py-3">#</th>
-                <th class="px-4 py-3">Jugador</th>
-                <th class="px-4 py-3 text-center">Pts</th>
-                <th class="px-4 py-3 text-center" title="Resultados exactos">🎯</th>
-                <th class="px-4 py-3 text-center">Pron.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {d.finishedCount === 0 && (
-                <tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">Aún no hay partidos finalizados este día.</td></tr>
-              )}
-              {d.finishedCount > 0 && d.ranking.map((r, i) => (
-                <tr class={`border-t border-gray-100 ${r.user_id === user.id ? 'bg-polla-green-light/60 font-semibold' : i % 2 ? 'bg-gray-50/50' : ''}`}>
-                  <td class="px-4 py-3 text-lg">{medal(i)}</td>
-                  <td class="px-4 py-3">
-                    {r.username}
-                    {r.user_id === user.id && <span class="ml-2 rounded-full bg-polla-green px-2 py-0.5 text-xs text-white">tú</span>}
-                  </td>
-                  <td class="px-4 py-3 text-center text-lg font-extrabold text-polla-blue">{r.total_points}</td>
-                  <td class="px-4 py-3 text-center">{r.correct_exact}</td>
-                  <td class="px-4 py-3 text-center text-gray-500">{r.total_predictions}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    ))}
+          {ranking.map((r, i) => (
+            <tr class={`border-t border-gray-100 ${r.user_id === user.id ? 'bg-polla-green-light/60 font-semibold' : i % 2 ? 'bg-gray-50/50' : ''}`}>
+              <td class="px-4 py-3 text-lg">{medal(i)}</td>
+              <td class="px-4 py-3">
+                {r.username}
+                {r.user_id === user.id && <span class="ml-2 rounded-full bg-polla-green px-2 py-0.5 text-xs text-white">tú</span>}
+              </td>
+              <td class="px-4 py-3 text-center text-lg font-extrabold text-polla-blue">{r.total_points}</td>
+              <td class="px-4 py-3 text-center">{r.correct_exact}</td>
+              <td class="px-4 py-3 text-center text-gray-500">{r.total_predictions}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   </section>
 
   <script is:inline>
@@ -385,58 +323,21 @@ const medal = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '�
       modal.addEventListener('click', (e) => { if (e.target === modal) modal.close(); });
     })();
 
-    // Filtro de partidos por día + tabla diaria/histórica.
+    // Filtro de partidos por día (solo afecta las tarjetas de pronóstico).
     (() => {
       const filter = document.getElementById('day-filter');
       const cards = document.querySelectorAll('.match-card');
-      const section = document.getElementById('tabla-section');
-      const tabs = document.querySelectorAll('.table-tab');
-      const histView = document.getElementById('view-historica');
-      const dailyViews = document.querySelectorAll('.daily-view');
-
-      const today = section ? section.getAttribute('data-today') : null;
-      const defaultDay = section ? section.getAttribute('data-default-day') : 'all';
-      const dailyDays = [...dailyViews].map((v) => v.getAttribute('data-day'));
-      let mode = defaultDay && defaultDay !== 'all' ? 'diaria' : 'historica';
-
-      const selectedDay = () => (filter ? filter.value : 'all');
-
-      // Día a mostrar en la tabla diaria: el del filtro si aplica; si no, hoy; si no, el primero.
-      function dailyDay() {
-        const v = selectedDay();
-        if (v !== 'all' && dailyDays.includes(v)) return v;
-        if (today && dailyDays.includes(today)) return today;
-        return dailyDays[0] || null;
-      }
 
       function filterCards() {
-        const day = selectedDay();
+        const day = filter ? filter.value : 'all';
         cards.forEach((c) => {
           const show = day === 'all' || c.getAttribute('data-day') === day;
           c.style.display = show ? '' : 'none';
         });
       }
 
-      function renderTable() {
-        tabs.forEach((t) => {
-          const active = t.getAttribute('data-mode') === mode;
-          t.classList.toggle('bg-white', active);
-          t.classList.toggle('shadow-sm', active);
-          t.classList.toggle('text-polla-blue', active);
-          t.classList.toggle('text-gray-500', !active);
-        });
-        if (histView) histView.hidden = mode !== 'historica';
-        const day = dailyDay();
-        dailyViews.forEach((v) => {
-          v.hidden = !(mode === 'diaria' && v.getAttribute('data-day') === day);
-        });
-      }
-
-      if (filter) filter.addEventListener('change', () => { filterCards(); renderTable(); });
-      tabs.forEach((t) => t.addEventListener('click', () => { mode = t.getAttribute('data-mode'); renderTable(); }));
-
+      if (filter) filter.addEventListener('change', filterCards);
       filterCards();
-      renderTable();
     })();
   </script>
 </Layout>
