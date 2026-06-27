@@ -12,7 +12,7 @@ create table if not exists public.profiles (
   id          uuid primary key references auth.users(id) on delete cascade,
   username    text unique not null,
   avatar_url  text,
-  role        text not null default 'player' check (role in ('player', 'admin')),
+  role        text not null default 'player' check (role in ('player', 'admin', 'tesorero')),
   created_at  timestamptz not null default now()
 );
 
@@ -35,9 +35,36 @@ create table if not exists public.matches (
 -- Evita duplicados al re-sincronizar desde la API
 create unique index if not exists matches_external_id_key on public.matches (external_id);
 
--- Pronósticos
+-- Pollas: selección de partidos + monto por persona, creada por un usuario.
+create table if not exists public.polls (
+  id           uuid primary key default gen_random_uuid(),
+  name         text not null,
+  created_by   uuid not null references public.profiles(id) on delete cascade,
+  entry_amount numeric not null default 0 check (entry_amount >= 0),
+  created_at   timestamptz not null default now()
+);
+
+-- Partidos que pertenecen a cada polla.
+create table if not exists public.poll_matches (
+  poll_id   uuid not null references public.polls(id)   on delete cascade,
+  match_id  uuid not null references public.matches(id) on delete cascade,
+  primary key (poll_id, match_id)
+);
+
+-- Jugadores inscritos en cada polla.
+create table if not exists public.poll_members (
+  poll_id   uuid not null references public.polls(id)    on delete cascade,
+  user_id   uuid not null references public.profiles(id) on delete cascade,
+  joined_at timestamptz not null default now(),
+  paid      boolean not null default false,
+  paid_at   timestamptz,
+  primary key (poll_id, user_id)
+);
+
+-- Pronósticos (independientes por polla)
 create table if not exists public.predictions (
   id            uuid primary key default gen_random_uuid(),
+  poll_id       uuid not null references public.polls(id) on delete cascade,
   user_id       uuid not null references public.profiles(id) on delete cascade,
   match_id      uuid not null references public.matches(id) on delete cascade,
   home_score    int not null check (home_score >= 0),
@@ -45,9 +72,13 @@ create table if not exists public.predictions (
   points_earned int not null default 0,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now(),
-  unique (user_id, match_id)
+  unique (poll_id, user_id, match_id)
 );
 
+create index if not exists idx_poll_matches_poll on public.poll_matches(poll_id);
+create index if not exists idx_poll_members_poll on public.poll_members(poll_id);
+create index if not exists idx_poll_members_user on public.poll_members(user_id);
+create index if not exists idx_predictions_poll  on public.predictions(poll_id);
 create index if not exists idx_predictions_match on public.predictions(match_id);
 create index if not exists idx_predictions_user  on public.predictions(user_id);
 create index if not exists idx_matches_date       on public.matches(match_date);
@@ -143,37 +174,53 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- ---------------------------------------------------------------------
--- 4. VISTA LEADERBOARD (tabla de posiciones)
--- ---------------------------------------------------------------------
-create or replace view public.leaderboard as
-select
-  pr.id                                                      as user_id,
-  pr.username,
-  pr.avatar_url,
-  coalesce(sum(p.points_earned), 0)                          as total_points,
-  count(p.id) filter (where p.points_earned = 5)             as correct_exact,
-  count(p.id) filter (where p.points_earned = 3)             as correct_diff,
-  count(p.id) filter (where p.points_earned = 2)             as correct_winner,
-  count(p.id)                                                as total_predictions
-from public.profiles pr
-left join public.predictions p on p.user_id = pr.id
-group by pr.id, pr.username, pr.avatar_url
-order by total_points desc, correct_exact desc, total_predictions desc;
-
-grant select on public.leaderboard to anon, authenticated;
+-- (El ranking se calcula por polla en la aplicación; no hay vista global.)
 
 -- ---------------------------------------------------------------------
--- 5. SEGURIDAD (Row Level Security)
+-- 4. SEGURIDAD (Row Level Security)
 -- ---------------------------------------------------------------------
 create or replace function public.is_admin()
 returns boolean language sql security definer stable set search_path = public as $$
   select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin');
 $$;
 
-alter table public.profiles    enable row level security;
-alter table public.matches     enable row level security;
-alter table public.predictions enable row level security;
+create or replace function public.is_tesorero()
+returns boolean language sql security definer stable set search_path = public as $$
+  select exists (select 1 from public.profiles where id = auth.uid() and role = 'tesorero');
+$$;
+
+-- ¿El partido sigue abierto para pronosticar? (5 min antes del inicio salvo override)
+create or replace function public.match_open(p_match_id uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.matches m
+    where m.id = p_match_id
+      and (
+        m.force_open is true
+        or (
+          m.force_open is not false
+          and m.status = 'upcoming'
+          and m.match_date > now() + interval '5 minutes'
+        )
+      )
+  );
+$$;
+
+alter table public.profiles     enable row level security;
+alter table public.matches      enable row level security;
+alter table public.predictions  enable row level security;
+alter table public.polls        enable row level security;
+alter table public.poll_matches enable row level security;
+alter table public.poll_members enable row level security;
+
+-- Permisos a nivel de tabla para los roles de Supabase (las filas las restringe RLS).
+-- En Supabase hosted suelen venir por "default privileges"; se declaran aquí para que
+-- el esquema sea portable (p. ej. en un Supabase local).
+grant usage on schema public to anon, authenticated, service_role;
+grant select, insert, update, delete on
+  public.profiles, public.matches, public.predictions,
+  public.polls, public.poll_matches, public.poll_members
+  to anon, authenticated, service_role;
 
 -- PROFILES: todos pueden leer; cada quien edita el suyo
 drop policy if exists profiles_select_all on public.profiles;
@@ -184,6 +231,11 @@ drop policy if exists profiles_update_own on public.profiles;
 create policy profiles_update_own on public.profiles
   for update using (auth.uid() = id) with check (auth.uid() = id);
 
+-- El admin puede actualizar cualquier perfil (asignar/quitar el rol de tesorero).
+drop policy if exists profiles_admin_update on public.profiles;
+create policy profiles_admin_update on public.profiles
+  for update using (public.is_admin()) with check (public.is_admin());
+
 -- MATCHES: todos pueden leer; solo admin gestiona
 drop policy if exists matches_select_all on public.matches;
 create policy matches_select_all on public.matches
@@ -193,9 +245,65 @@ drop policy if exists matches_admin_all on public.matches;
 create policy matches_admin_all on public.matches
   for all using (public.is_admin()) with check (public.is_admin());
 
--- PREDICTIONS:
+-- POLLS: todo autenticado lee; cualquiera crea la suya; solo creador/admin modifica
+drop policy if exists polls_select_all on public.polls;
+create policy polls_select_all on public.polls
+  for select using (auth.uid() is not null);
+
+drop policy if exists polls_insert_own on public.polls;
+create policy polls_insert_own on public.polls
+  for insert with check (created_by = auth.uid());
+
+drop policy if exists polls_update_owner on public.polls;
+create policy polls_update_owner on public.polls
+  for update using (created_by = auth.uid() or public.is_admin())
+  with check (created_by = auth.uid() or public.is_admin());
+
+drop policy if exists polls_delete_owner on public.polls;
+create policy polls_delete_owner on public.polls
+  for delete using (created_by = auth.uid() or public.is_admin());
+
+-- POLL_MATCHES: todo autenticado lee; solo el creador de la polla (o admin) gestiona
+drop policy if exists poll_matches_select_all on public.poll_matches;
+create policy poll_matches_select_all on public.poll_matches
+  for select using (auth.uid() is not null);
+
+drop policy if exists poll_matches_manage_owner on public.poll_matches;
+create policy poll_matches_manage_owner on public.poll_matches
+  for all using (
+    public.is_admin()
+    or exists (select 1 from public.polls p where p.id = poll_id and p.created_by = auth.uid())
+  ) with check (
+    public.is_admin()
+    or exists (select 1 from public.polls p where p.id = poll_id and p.created_by = auth.uid())
+  );
+
+-- POLL_MEMBERS: todo autenticado lee; cada quien se une por sí mismo; sale uno mismo/creador/admin
+drop policy if exists poll_members_select_all on public.poll_members;
+create policy poll_members_select_all on public.poll_members
+  for select using (auth.uid() is not null);
+
+drop policy if exists poll_members_join_self on public.poll_members;
+create policy poll_members_join_self on public.poll_members
+  for insert with check (user_id = auth.uid());
+
+drop policy if exists poll_members_leave on public.poll_members;
+create policy poll_members_leave on public.poll_members
+  for delete using (
+    user_id = auth.uid()
+    or public.is_admin()
+    or exists (select 1 from public.polls p where p.id = poll_id and p.created_by = auth.uid())
+  );
+
+-- El tesorero (o admin) puede actualizar la inscripción para marcar el pago.
+drop policy if exists poll_members_pay on public.poll_members;
+create policy poll_members_pay on public.poll_members
+  for update using (public.is_tesorero() or public.is_admin())
+  with check (public.is_tesorero() or public.is_admin());
+
+-- PREDICTIONS (por polla):
 --  * Lectura: propios siempre; ajenos solo tras el cierre del partido; admin todo
---  * Inserción / edición: solo el dueño y solo mientras el partido siga abierto
+--  * Inserción / edición: dueño + miembro de la polla + partido de la polla + abierto
 drop policy if exists predictions_select_visible on public.predictions;
 create policy predictions_select_visible on public.predictions
   for select using (
@@ -213,37 +321,21 @@ drop policy if exists predictions_insert_own on public.predictions;
 create policy predictions_insert_own on public.predictions
   for insert with check (
     user_id = auth.uid()
-    and exists (
-      select 1 from public.matches m
-      where m.id = match_id
-        and (
-          m.force_open is true
-          or (
-            m.force_open is not false
-            and m.status = 'upcoming'
-            and m.match_date > now() + interval '5 minutes'
-          )
-        )
-    )
+    and exists (select 1 from public.poll_members pm where pm.poll_id = poll_id and pm.user_id = auth.uid())
+    and exists (select 1 from public.poll_matches qm where qm.poll_id = poll_id and qm.match_id = match_id)
+    and public.match_open(match_id)
   );
 
 drop policy if exists predictions_update_own on public.predictions;
 create policy predictions_update_own on public.predictions
   for update using (
     user_id = auth.uid()
-    and exists (
-      select 1 from public.matches m
-      where m.id = match_id
-        and (
-          m.force_open is true
-          or (
-            m.force_open is not false
-            and m.status = 'upcoming'
-            and m.match_date > now() + interval '5 minutes'
-          )
-        )
-    )
-  ) with check (user_id = auth.uid());
+    and public.match_open(match_id)
+  ) with check (
+    user_id = auth.uid()
+    and exists (select 1 from public.poll_members pm where pm.poll_id = poll_id and pm.user_id = auth.uid())
+    and exists (select 1 from public.poll_matches qm where qm.poll_id = poll_id and qm.match_id = match_id)
+  );
 
 -- =====================================================================
 --  FIN DEL ESQUEMA

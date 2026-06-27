@@ -14,6 +14,13 @@ const matches = (data as Match[]) ?? [];
 
 const pending = matches.filter((m) => m.status !== 'finished').length;
 
+// Usuarios registrados (para designar tesorero)
+const { data: profData } = await supabase
+  .from('profiles')
+  .select('id, username, role')
+  .order('username', { ascending: true });
+const profiles = (profData as { id: string; username: string; role: string }[]) ?? [];
+
 // valor por defecto para datetime-local (ahora + 2h, en UTC-5)
 const def = isoToLocalInput(new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString());
 ---
@@ -47,6 +54,45 @@ const def = isoToLocalInput(new Date(Date.now() + 2 * 60 * 60 * 1000).toISOStrin
         ⟳ Sincronizar fixture
       </button>
     </form>
+  </section>
+
+  <!-- Gestionar tesorero -->
+  <section class="mt-8 rounded-2xl border border-polla-gold/40 bg-yellow-50/60 p-6 shadow-sm">
+    <h2 class="mb-1 text-lg font-bold text-polla-blue">Gestionar tesorero</h2>
+    <p class="mb-4 text-sm text-gray-600">
+      El tesorero marca quién ya pagó. Solo puede haber <strong>uno a la vez</strong>: al asignarlo a
+      alguien, se le retira al anterior.
+    </p>
+    <div class="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-200 bg-white">
+      {profiles.map((p) => (
+        <div class="flex items-center justify-between gap-3 px-4 py-2.5">
+          <span class="flex items-center gap-2 text-sm">
+            <span class="font-medium">{p.username}</span>
+            {p.role === 'admin' && <span class="rounded-full bg-polla-blue px-2 py-0.5 text-xs font-semibold text-white">admin</span>}
+            {p.role === 'tesorero' && <span class="rounded-full bg-polla-gold px-2 py-0.5 text-xs font-semibold text-polla-blue">tesorero</span>}
+          </span>
+          {p.role !== 'admin' && (
+            p.role === 'tesorero' ? (
+              <form method="POST" action="/api/admin/set-role">
+                <input type="hidden" name="user_id" value={p.id} />
+                <input type="hidden" name="action" value="revoke" />
+                <button class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50">
+                  Quitar tesorero
+                </button>
+              </form>
+            ) : (
+              <form method="POST" action="/api/admin/set-role">
+                <input type="hidden" name="user_id" value={p.id} />
+                <input type="hidden" name="action" value="grant" />
+                <button class="rounded-lg bg-polla-gold px-3 py-1.5 text-sm font-semibold text-polla-blue transition hover:brightness-95">
+                  Hacer tesorero
+                </button>
+              </form>
+            )
+          )}
+        </div>
+      ))}
+    </div>
   </section>
 
   <!-- Crear partido -->

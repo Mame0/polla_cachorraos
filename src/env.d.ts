@@ -7,7 +7,7 @@ export interface Profile {
   id: string;
   username: string;
   avatar_url: string | null;
-  role: 'player' | 'admin';
+  role: 'player' | 'admin' | 'tesorero';
 }
 
 declare global {

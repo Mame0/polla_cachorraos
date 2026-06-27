@@ -14,7 +14,7 @@ const m = match as Match;
 
 const { data: preds } = await supabase
   .from('predictions')
-  .select('home_score, away_score, points_earned, profiles(username)')
+  .select('home_score, away_score, points_earned, profiles(username), polls(name)')
   .eq('match_id', id);
 const rows = ((preds as any[]) ?? []).sort((a, b) => b.points_earned - a.points_earned);
 const finished = m.status === 'finished';
@@ -34,19 +34,21 @@ const finished = m.status === 'finished';
       <thead>
         <tr class="bg-polla-blue text-left text-white">
           <th class="px-4 py-3">Jugador</th>
+          <th class="px-4 py-3">Polla</th>
           <th class="px-4 py-3 text-center">Pronóstico</th>
           {finished && <th class="px-4 py-3 text-center">Puntos</th>}
         </tr>
       </thead>
       <tbody>
         {rows.length === 0 && (
-          <tr><td colspan="3" class="px-4 py-8 text-center text-gray-400">Nadie ha pronosticado este partido.</td></tr>
+          <tr><td colspan="4" class="px-4 py-8 text-center text-gray-400">Nadie ha pronosticado este partido.</td></tr>
         )}
         {rows.map((r, i) => {
           const badge = finished ? pointsBadge(r.points_earned) : null;
           return (
             <tr class={`border-t border-gray-100 ${i % 2 ? 'bg-gray-50/50' : ''}`}>
               <td class="px-4 py-3 font-medium">{r.profiles?.username ?? '—'}</td>
+              <td class="px-4 py-3 text-gray-500">{r.polls?.name ?? '—'}</td>
               <td class="px-4 py-3 text-center font-bold">{r.home_score} – {r.away_score}</td>
               {finished && badge && (
                 <td class="px-4 py-3 text-center">

@@ -1,0 +1,291 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { isOpen, formatDate, statusLabel, pointsBadge, pot, formatMoney, type Match, type Prediction, type Poll } from '../../lib/helpers';
+
+const { supabase, user } = Astro.locals;
+if (!user) return Astro.redirect('/login?msg=Inicia sesión para ver la polla');
+
+const { id } = Astro.params;
+const saved = Astro.url.searchParams.get('saved');
+const error = Astro.url.searchParams.get('error');
+
+// --- Polla + creador ---
+const { data: pollData } = await supabase
+  .from('polls')
+  .select('*, creator:profiles!created_by(username)')
+  .eq('id', id)
+  .single();
+if (!pollData) return Astro.redirect('/?error=' + encodeURIComponent('Polla no encontrada.'));
+const poll = pollData as Poll & { creator: { username: string } | null };
+const isOwner = poll.created_by === user.id;
+
+// --- Miembros ---
+const { data: memberData } = await supabase
+  .from('poll_members')
+  .select('user_id, paid, profiles(username)')
+  .eq('poll_id', id);
+const members = (memberData as any[]) ?? [];
+const memberCount = members.length;
+const myMembership = members.find((m) => m.user_id === user.id);
+const isMember = !!myMembership;
+const myPaid = myMembership?.paid === true;
+const boteTotal = pot(poll.entry_amount, memberCount);
+
+// --- Partidos de la polla ---
+const { data: pmData } = await supabase
+  .from('poll_matches')
+  .select('matches(*)')
+  .eq('poll_id', id);
+const matches = ((pmData as any[]) ?? [])
+  .map((r) => r.matches as Match)
+  .filter(Boolean)
+  .sort((a, b) => new Date(a.match_date).getTime() - new Date(b.match_date).getTime());
+
+const finishedMatches = matches.filter((m) => m.status === 'finished');
+const allFinished = matches.length > 0 && finishedMatches.length === matches.length;
+
+// --- Pronósticos de la polla (para ranking y los propios) ---
+const { data: predData } = await supabase
+  .from('predictions')
+  .select('user_id, match_id, home_score, away_score, points_earned, profiles(username)')
+  .eq('poll_id', id);
+const allPreds = (predData as any[]) ?? [];
+
+// Mis pronósticos indexados por match_id.
+const myPreds = new Map<string, Prediction>();
+for (const p of allPreds) if (p.user_id === user.id) myPreds.set(p.match_id, p as Prediction);
+
+// --- Ranking: sumar puntos por jugador sobre los partidos finalizados ---
+const finishedIds = new Set(finishedMatches.map((m) => m.id));
+type Row = { user_id: string; username: string; total_points: number; correct_exact: number; total_predictions: number };
+const acc = new Map<string, Row>();
+// Inicializar con todos los miembros (aunque no hayan pronosticado).
+for (const mem of members) {
+  acc.set(mem.user_id, {
+    user_id: mem.user_id,
+    username: mem.profiles?.username ?? '—',
+    total_points: 0,
+    correct_exact: 0,
+    total_predictions: 0,
+  });
+}
+for (const p of allPreds) {
+  if (!finishedIds.has(p.match_id)) continue;
+  const row = acc.get(p.user_id);
+  if (!row) continue;
+  row.total_points += p.points_earned;
+  if (p.points_earned === 5) row.correct_exact++;
+  row.total_predictions++;
+}
+const ranking = [...acc.values()].sort(
+  (a, b) => b.total_points - a.total_points || b.correct_exact - a.correct_exact
+);
+
+const anyOpen = matches.some((m) => isOpen(m));
+const medal = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`);
+---
+
+<Layout title={`${poll.name} · Polla Cachorraos`}>
+  <a href="/" class="text-sm font-semibold text-polla-blue hover:underline">← Volver al inicio</a>
+
+  <div class="mt-2 flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-extrabold text-polla-blue">{poll.name}</h1>
+      <p class="mt-1 text-sm text-gray-500">
+        Creada por {poll.creator?.username ?? '—'} · {matches.length} partidos
+      </p>
+    </div>
+    {isOwner && (
+      <form method="POST" action="/api/polls/delete" onsubmit="return confirm('¿Eliminar esta polla? Se borran sus pronósticos.');">
+        <input type="hidden" name="poll_id" value={poll.id} />
+        <button class="rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50">
+          Eliminar
+        </button>
+      </form>
+    )}
+  </div>
+
+  <div class="mt-4 grid gap-4 sm:grid-cols-3">
+    <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+      <p class="text-sm text-gray-500">Monto por persona</p>
+      <p class="mt-1 text-2xl font-extrabold text-polla-blue">{formatMoney(poll.entry_amount)}</p>
+    </div>
+    <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+      <p class="text-sm text-gray-500">Participantes</p>
+      <p class="mt-1 text-2xl font-extrabold text-gray-700">{memberCount}</p>
+    </div>
+    <div class="rounded-2xl border border-polla-green/30 bg-polla-green-light p-5 shadow-sm">
+      <p class="text-sm text-polla-green">Bote total</p>
+      <p class="mt-1 text-2xl font-extrabold text-polla-green">{formatMoney(boteTotal)}</p>
+    </div>
+  </div>
+
+  {saved && <p class="mt-4 rounded-lg bg-polla-green-light px-4 py-3 text-sm text-polla-green">✅ {saved === '1' ? 'Pronósticos guardados.' : saved}</p>}
+  {error && <p class="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+
+  {!isMember && (
+    <div class="mt-6 rounded-xl border border-polla-blue/30 bg-polla-blue-light p-5 text-center">
+      <p class="text-sm text-gray-700">Aún no participas en esta polla.</p>
+      <form method="POST" action="/api/polls/join" class="mt-3">
+        <input type="hidden" name="poll_id" value={poll.id} />
+        <button class="rounded-lg bg-polla-blue px-6 py-2.5 text-sm font-semibold text-white transition hover:brightness-110">
+          Unirme a la polla
+        </button>
+      </form>
+    </div>
+  )}
+
+  {/* --- Aviso de pago (Yape del chef Gabriel) --- */}
+  {isMember && (
+    <div class="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-polla-gold/40 bg-yellow-50 px-4 py-3">
+      <p class="text-sm font-medium text-gray-700">
+        💸 Recuerda hacer tu paguito con el chef Gabriel
+        {myPaid ? (
+          <span class="ml-2 rounded-full bg-polla-green-light px-2 py-0.5 text-xs font-semibold text-polla-green">Tu pago: pagado ✓</span>
+        ) : (
+          <span class="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">Tu pago: pendiente</span>
+        )}
+      </p>
+      <button
+        type="button" id="yape-btn"
+        class="inline-flex items-center gap-2 rounded-lg bg-polla-blue px-3 py-1.5 text-sm font-semibold text-white transition hover:brightness-110"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+          <path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm13-2h3v2h-3v-2zm-5 0h3v3h-2v-1h-1v-2zm5 3h3v5h-5v-2h2v-1h-2v-1h2v-1zm-5 2h2v3h-2v-3z"/>
+        </svg>
+        Pagar con Yape
+      </button>
+    </div>
+  )}
+
+  {isMember && (
+    <dialog id="yape-modal" class="fixed left-1/2 top-1/2 m-0 -translate-x-1/2 -translate-y-1/2 rounded-2xl p-0 backdrop:bg-black/50">
+      <div class="w-[26rem] max-w-[92vw] p-6 text-center">
+        <h3 class="text-lg font-bold text-polla-blue">Yape · Chef Gabriel</h3>
+        <p class="mt-1 text-sm text-gray-500">Escanea el código para hacer tu pago.</p>
+        <img src="/yape-gabriel.png" alt="QR de Yape del chef Gabriel" class="mx-auto mt-4 w-80 max-w-full rounded-lg border border-gray-200" />
+        <button id="yape-close" type="button" class="mt-5 w-full rounded-lg bg-gray-100 px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-200">
+          Cerrar
+        </button>
+      </div>
+    </dialog>
+  )}
+
+  {/* --- Pronósticos (solo miembros) --- */}
+  {isMember && (
+    <section class="mt-6">
+      <h2 class="text-lg font-bold text-gray-800">Mis pronósticos</h2>
+      <p class="mt-1 text-sm text-gray-500">El pronóstico se cierra 5 minutos antes de cada partido.</p>
+
+      <form method="POST" action="/api/predictions-batch" class="mt-3 space-y-3">
+        <input type="hidden" name="poll_id" value={poll.id} />
+        {matches.map((m) => {
+          const pred = myPreds.get(m.id);
+          const open = isOpen(m);
+          const finished = m.status === 'finished';
+          const badge = pred && finished ? pointsBadge(pred.points_earned) : null;
+          return (
+            <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+                  {statusLabel[m.status]} · {formatDate(m.match_date)}
+                </span>
+                {finished && <span class="text-sm font-bold text-gray-700">Resultado: {m.home_score} – {m.away_score}</span>}
+                {badge && <span class={`rounded-full px-2 py-0.5 text-xs font-semibold ${badge.classes}`}>{badge.label}</span>}
+                {!open && !finished && <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-400">Cerrado</span>}
+              </div>
+              <div class="mt-3 flex flex-wrap items-center justify-center gap-3 sm:justify-between">
+                <div class="flex flex-1 items-center justify-end gap-2 text-right font-semibold min-w-[120px]">{m.home_team}</div>
+                <input
+                  type="number" name={`home_${m.id}`} min="0" max="99"
+                  value={pred?.home_score ?? ''}
+                  disabled={!open}
+                  class="w-14 rounded-lg border border-gray-300 px-2 py-2 text-center text-lg font-bold focus:border-polla-blue focus:outline-none focus:ring-2 focus:ring-polla-blue/30 disabled:bg-gray-100 disabled:text-gray-500"
+                  placeholder="-"
+                />
+                <span class="font-bold text-gray-400">:</span>
+                <input
+                  type="number" name={`away_${m.id}`} min="0" max="99"
+                  value={pred?.away_score ?? ''}
+                  disabled={!open}
+                  class="w-14 rounded-lg border border-gray-300 px-2 py-2 text-center text-lg font-bold focus:border-polla-blue focus:outline-none focus:ring-2 focus:ring-polla-blue/30 disabled:bg-gray-100 disabled:text-gray-500"
+                  placeholder="-"
+                />
+                <div class="flex flex-1 items-center gap-2 font-semibold min-w-[120px]">{m.away_team}</div>
+              </div>
+            </div>
+          );
+        })}
+
+        {anyOpen ? (
+          <button class="w-full rounded-lg bg-polla-green px-4 py-3 text-sm font-semibold text-white transition hover:brightness-110">
+            Guardar pronósticos
+          </button>
+        ) : (
+          <p class="rounded-lg bg-gray-100 px-4 py-3 text-center text-sm font-medium text-gray-400">
+            Todos los pronósticos de esta polla están cerrados.
+          </p>
+        )}
+      </form>
+    </section>
+  )}
+
+  {/* --- Tabla de la polla --- */}
+  <section class="mt-10">
+    <div class="flex items-center justify-between">
+      <h2 class="text-lg font-bold text-gray-800">Tabla de la polla</h2>
+      {allFinished && ranking.length > 0 && (
+        <span class="rounded-full bg-polla-gold px-3 py-1 text-xs font-bold text-polla-blue">
+          🏆 Ganador: {ranking[0].username}
+        </span>
+      )}
+    </div>
+    <p class="mt-1 text-sm text-gray-500">
+      Puntos sobre los {finishedMatches.length} partidos finalizados · desempate por exactos.
+    </p>
+
+    <div class="mt-4 overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="bg-polla-blue text-left text-white">
+            <th class="px-4 py-3">#</th>
+            <th class="px-4 py-3">Jugador</th>
+            <th class="px-4 py-3 text-center">Pts</th>
+            <th class="px-4 py-3 text-center" title="Resultados exactos">🎯</th>
+            <th class="px-4 py-3 text-center">Pron.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ranking.length === 0 && (
+            <tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">Aún no hay participantes.</td></tr>
+          )}
+          {ranking.map((r, i) => (
+            <tr class={`border-t border-gray-100 ${r.user_id === user.id ? 'bg-polla-green-light/60 font-semibold' : i % 2 ? 'bg-gray-50/50' : ''}`}>
+              <td class="px-4 py-3 text-lg">{medal(i)}</td>
+              <td class="px-4 py-3">
+                {r.username}
+                {r.user_id === user.id && <span class="ml-2 rounded-full bg-polla-green px-2 py-0.5 text-xs text-white">tú</span>}
+              </td>
+              <td class="px-4 py-3 text-center text-lg font-extrabold text-polla-blue">{r.total_points}</td>
+              <td class="px-4 py-3 text-center">{r.correct_exact}</td>
+              <td class="px-4 py-3 text-center text-gray-500">{r.total_predictions}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <script is:inline>
+    (() => {
+      const btn = document.getElementById('yape-btn');
+      const modal = document.getElementById('yape-modal');
+      const close = document.getElementById('yape-close');
+      if (!btn || !modal) return;
+      btn.addEventListener('click', () => modal.showModal());
+      close && close.addEventListener('click', () => modal.close());
+      // Cerrar al hacer click fuera del contenido.
+      modal.addEventListener('click', (e) => { if (e.target === modal) modal.close(); });
+    })();
+  </script>
+</Layout>

@@ -13,11 +13,37 @@ export interface Match {
 
 export interface Prediction {
   id: string;
+  poll_id: string;
   user_id: string;
   match_id: string;
   home_score: number;
   away_score: number;
   points_earned: number;
+}
+
+export interface Poll {
+  id: string;
+  name: string;
+  created_by: string;
+  entry_amount: number;
+  created_at: string;
+  // Campos derivados opcionales (cuando se calculan en la consulta).
+  member_count?: number;
+  match_count?: number;
+}
+
+/** Bote total de la polla = monto por persona × número de participantes. */
+export function pot(entryAmount: number, members: number): number {
+  return (entryAmount ?? 0) * (members ?? 0);
+}
+
+/** Formatea un monto en soles peruanos (sin decimales). */
+export function formatMoney(amount: number): string {
+  return new Intl.NumberFormat('es-PE', {
+    style: 'currency',
+    currency: 'PEN',
+    maximumFractionDigits: 0,
+  }).format(amount ?? 0);
 }
 
 const CLOSE_MS = 5 * 60 * 1000; // 5 minutos antes del inicio

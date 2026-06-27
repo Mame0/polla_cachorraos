@@ -8,12 +8,11 @@ const { title = 'Polla Mundialista' } = Astro.props;
 
 const { user, profile } = Astro.locals;
 const isAdmin = profile?.role === 'admin';
+const isTesorero = profile?.role === 'tesorero';
 const path = Astro.url.pathname;
 
 const navLinks = [
-  { href: '/', label: 'Inicio' },
-  { href: '/partidos', label: 'Partidos' },
-  { href: '/tabla', label: 'Tabla' },
+  { href: '/', label: 'Pollas' },
   { href: '/mis-pronosticos', label: 'Mis pronósticos' },
 ];
 ---
@@ -30,7 +29,7 @@ const navLinks = [
     <header class="bg-polla-blue text-white shadow-md">
       <nav class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3">
         <a href="/" class="flex items-center gap-2 text-lg font-extrabold tracking-tight">
-          <span class="text-2xl">⚽</span> POLLA <span class="text-polla-gold">MUNDIALISTA</span>
+          <span class="text-2xl">⚽</span> POLLA <span class="text-polla-gold">CACHORRAOS</span>
         </a>
 
         {user && (
@@ -45,6 +44,16 @@ const navLinks = [
                 {link.label}
               </a>
             ))}
+            {(isAdmin || isTesorero) && (
+              <a
+                href="/tesorero"
+                class={`rounded-md px-3 py-1.5 font-semibold text-polla-gold transition hover:bg-white/15 ${
+                  path.startsWith('/tesorero') ? 'bg-white/20' : ''
+                }`}
+              >
+                Tesorero
+              </a>
+            )}
             {isAdmin && (
               <a
                 href="/admin"
@@ -87,7 +96,7 @@ const navLinks = [
     </main>
 
     <footer class="mt-12 border-t border-gray-200 py-6 text-center text-xs text-gray-500">
-      Polla Mundialista · v1.0 · Astro + Supabase
+      Polla Cachorraos · Astro + Supabase
     </footer>
   </body>
 </html>

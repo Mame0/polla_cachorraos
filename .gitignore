@@ -7,6 +7,8 @@ dist/
 node_modules/
 
 # logs
+*.log
+dev.err
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -15,6 +17,12 @@ pnpm-debug.log*
 # environment variables
 .env
 .env.production
+
+# Supabase local (CLI) — solo para pruebas locales, no se usa en producción
+supabase/config.toml
+supabase/migrations/
+supabase/.branches/
+supabase/.temp/
 
 # macOS / editor
 .DS_Store

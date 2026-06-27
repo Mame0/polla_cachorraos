@@ -1,59 +1,49 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { formatDate, statusLabel, isOpen, type Match, type Prediction } from '../lib/helpers';
+import { pot, formatMoney, type Poll } from '../lib/helpers';
 
 const { supabase, user, profile } = Astro.locals;
 
 const saved = Astro.url.searchParams.get('saved');
 const error = Astro.url.searchParams.get('error');
 
-// Landing para visitantes sin sesión
-let nextMatches: Match[] = [];
-let myRank: number | null = null;
-let myPoints = 0;
-const myPreds = new Map<string, Prediction>();
+type PollCard = Poll & { creator: { username: string } | null; member_count: number; is_member: boolean };
+let myPolls: PollCard[] = [];
+let openPolls: PollCard[] = [];
 
 if (user) {
-  const { data } = await supabase
-    .from('matches')
-    .select('*')
-    .eq('status', 'upcoming')
-    .order('match_date', { ascending: true })
-    .limit(4);
-  nextMatches = (data as Match[]) ?? [];
+  const [{ data: pollData }, { data: memberData }] = await Promise.all([
+    supabase.from('polls').select('*, creator:profiles!created_by(username)').order('created_at', { ascending: false }),
+    supabase.from('poll_members').select('poll_id, user_id'),
+  ]);
 
-  if (nextMatches.length) {
-    const { data: predData } = await supabase
-      .from('predictions')
-      .select('*')
-      .eq('user_id', user.id)
-      .in('match_id', nextMatches.map((m) => m.id));
-    for (const p of (predData as Prediction[]) ?? []) myPreds.set(p.match_id, p);
+  const members = (memberData as any[]) ?? [];
+  const countByPoll = new Map<string, number>();
+  const mine = new Set<string>();
+  for (const m of members) {
+    countByPoll.set(m.poll_id, (countByPoll.get(m.poll_id) ?? 0) + 1);
+    if (m.user_id === user.id) mine.add(m.poll_id);
   }
 
-  const { data: board } = await supabase
-    .from('leaderboard')
-    .select('user_id, total_points');
-  if (board) {
-    const idx = board.findIndex((r: any) => r.user_id === user.id);
-    if (idx >= 0) {
-      myRank = idx + 1;
-      myPoints = board[idx].total_points;
-    }
-  }
+  const cards: PollCard[] = ((pollData as any[]) ?? []).map((p) => ({
+    ...(p as Poll),
+    creator: p.creator ?? null,
+    member_count: countByPoll.get(p.id) ?? 0,
+    is_member: mine.has(p.id),
+  }));
+
+  myPolls = cards.filter((p) => p.is_member);
+  openPolls = cards.filter((p) => !p.is_member);
 }
-
-const anyOpen = nextMatches.some((m) => isOpen(m));
 ---
 
-<Layout title="Inicio · Polla Mundialista">
+<Layout title="Inicio · Polla Cachorraos">
   {!user ? (
     <section class="mx-auto max-w-2xl rounded-2xl border border-gray-200 bg-white p-10 text-center shadow-sm">
       <div class="text-6xl">⚽</div>
-      <h1 class="mt-4 text-3xl font-extrabold text-polla-blue">Polla Mundialista</h1>
+      <h1 class="mt-4 text-3xl font-extrabold text-polla-blue">Polla Cachorraos</h1>
       <p class="mx-auto mt-3 max-w-md text-gray-600">
-        Pronostica el marcador de cada partido, gana puntos según tu acierto y compite por la
-        cima de la tabla con tu grupo de amigos.
+        Crea pollas con tus amigos, elige los partidos del día, pon el monto y compite por el bote.
       </p>
       <div class="mt-6 flex justify-center gap-3">
         <a href="/register" class="rounded-lg bg-polla-green px-6 py-3 font-semibold text-white transition hover:brightness-110">
@@ -72,88 +62,65 @@ const anyOpen = nextMatches.some((m) => isOpen(m));
     </section>
   ) : (
     <section>
-      <h1 class="text-2xl font-extrabold text-polla-blue">
-        Hola, {profile?.username} 👋
-      </h1>
-
-      <div class="mt-4 grid gap-4 sm:grid-cols-2">
-        <div class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-          <p class="text-sm text-gray-500">Tu posición</p>
-          <p class="mt-1 text-4xl font-extrabold text-polla-blue">
-            {myRank ? `#${myRank}` : '—'}
-          </p>
-        </div>
-        <div class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-          <p class="text-sm text-gray-500">Puntos totales</p>
-          <p class="mt-1 text-4xl font-extrabold text-polla-green">{myPoints}</p>
-        </div>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h1 class="text-2xl font-extrabold text-polla-blue">Hola, {profile?.username} 👋</h1>
+        <a href="/crear-polla" class="rounded-lg bg-polla-green px-5 py-2.5 text-sm font-semibold text-white transition hover:brightness-110">
+          + Crear polla
+        </a>
       </div>
 
-      <div class="mt-8 flex items-center justify-between">
-        <h2 class="text-lg font-bold text-gray-800">Hacer pronóstico</h2>
-        <a href="/partidos" class="text-sm font-semibold text-polla-blue hover:underline">Ver todos →</a>
-      </div>
-      <p class="mt-1 text-sm text-gray-500">
-        Ingresa el marcador de los próximos partidos y guárdalos de una vez.
-      </p>
-
-      {saved && <p class="mt-4 rounded-lg bg-polla-green-light px-4 py-3 text-sm text-polla-green">✅ Pronósticos guardados.</p>}
+      {saved && <p class="mt-4 rounded-lg bg-polla-green-light px-4 py-3 text-sm text-polla-green">✅ {saved}</p>}
       {error && <p class="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
-      {nextMatches.length === 0 ? (
+      <h2 class="mt-8 text-lg font-bold text-gray-800">Mis pollas</h2>
+      {myPolls.length === 0 ? (
         <p class="mt-3 rounded-xl border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500">
-          No hay partidos próximos por ahora.
+          Aún no participas en ninguna polla. Crea una o únete a las disponibles.
         </p>
       ) : (
-        <form method="POST" action="/api/predictions-batch" class="mt-3 space-y-3">
-          {nextMatches.map((m) => {
-            const pred = myPreds.get(m.id);
-            const open = isOpen(m);
-            return (
-              <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
-                    {statusLabel[m.status]} · {formatDate(m.match_date)}
-                  </span>
-                  {!open && <span class="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-400">Cerrado</span>}
-                </div>
-                <div class="mt-3 flex flex-wrap items-center justify-center gap-3 sm:justify-between">
-                  <div class="flex flex-1 items-center justify-end gap-2 text-right font-semibold min-w-[120px]">
-                    {m.home_team}
-                  </div>
-                  <input
-                    type="number" name={`home_${m.id}`} min="0" max="99"
-                    value={pred?.home_score ?? ''}
-                    disabled={!open}
-                    class="w-14 rounded-lg border border-gray-300 px-2 py-2 text-center text-lg font-bold focus:border-polla-blue focus:outline-none focus:ring-2 focus:ring-polla-blue/30 disabled:bg-gray-100 disabled:text-gray-500"
-                    placeholder="-"
-                  />
-                  <span class="font-bold text-gray-400">:</span>
-                  <input
-                    type="number" name={`away_${m.id}`} min="0" max="99"
-                    value={pred?.away_score ?? ''}
-                    disabled={!open}
-                    class="w-14 rounded-lg border border-gray-300 px-2 py-2 text-center text-lg font-bold focus:border-polla-blue focus:outline-none focus:ring-2 focus:ring-polla-blue/30 disabled:bg-gray-100 disabled:text-gray-500"
-                    placeholder="-"
-                  />
-                  <div class="flex flex-1 items-center gap-2 font-semibold min-w-[120px]">
-                    {m.away_team}
-                  </div>
-                </div>
+        <div class="mt-3 grid gap-3 sm:grid-cols-2">
+          {myPolls.map((p) => (
+            <a href={`/polla/${p.id}`} class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:border-polla-blue/50 hover:shadow">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="font-bold text-polla-blue">{p.name}</h3>
+                <span class="rounded-full bg-polla-green-light px-2 py-0.5 text-xs font-semibold text-polla-green">Inscrito</span>
               </div>
-            );
-          })}
+              <p class="mt-1 text-xs text-gray-400">por {p.creator?.username ?? '—'}</p>
+              <div class="mt-3 flex items-center justify-between text-sm">
+                <span class="text-gray-500">{p.member_count} jugadores</span>
+                <span class="font-semibold text-gray-700">Bote {formatMoney(pot(p.entry_amount, p.member_count))}</span>
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
 
-          {anyOpen ? (
-            <button class="w-full rounded-lg bg-polla-green px-4 py-3 text-sm font-semibold text-white transition hover:brightness-110">
-              Guardar pronósticos
-            </button>
-          ) : (
-            <p class="rounded-lg bg-gray-100 px-4 py-3 text-center text-sm font-medium text-gray-400">
-              Los pronósticos de estos partidos están cerrados.
-            </p>
-          )}
-        </form>
+      <h2 class="mt-10 text-lg font-bold text-gray-800">Pollas disponibles</h2>
+      {openPolls.length === 0 ? (
+        <p class="mt-3 rounded-xl border border-dashed border-gray-300 bg-white p-6 text-center text-gray-500">
+          No hay otras pollas por ahora.
+        </p>
+      ) : (
+        <div class="mt-3 grid gap-3 sm:grid-cols-2">
+          {openPolls.map((p) => (
+            <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="font-bold text-polla-blue">{p.name}</h3>
+                <span class="text-sm font-semibold text-gray-700">{formatMoney(p.entry_amount)}</span>
+              </div>
+              <p class="mt-1 text-xs text-gray-400">por {p.creator?.username ?? '—'} · {p.member_count} jugadores</p>
+              <div class="mt-3 flex items-center justify-between gap-2">
+                <a href={`/polla/${p.id}`} class="text-sm font-semibold text-polla-blue hover:underline">Ver →</a>
+                <form method="POST" action="/api/polls/join">
+                  <input type="hidden" name="poll_id" value={p.id} />
+                  <button class="rounded-lg bg-polla-blue px-4 py-1.5 text-sm font-semibold text-white transition hover:brightness-110">
+                    Unirme
+                  </button>
+                </form>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </section>
   )}

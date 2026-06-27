@@ -2,7 +2,21 @@
   "permissions": {
     "allow": [
       "PowerShell(npm run build 2>&1)",
-      "PowerShell(npm install 2>&1)"
+      "PowerShell(npm install 2>&1)",
+      "PowerShell([Convert]::ToHexString\\(\\(1..32 | ForEach-Object { Get-Random -Max 256 }\\)\\).ToLower\\(\\))",
+      "PowerShell(-join \\(\\(1..48\\) | ForEach-Object { '{0:x}' -f \\(Get-Random -Max 16\\) }\\))",
+      "PowerShell(try { $r = Invoke-RestMethod -Method Post -Uri 'https://polla-cachorraos.vercel.app/api/cron/sync' -Headers @{ Authorization = 'Bearer 35dda9f0b7c1c433cc1127a9981195733d5fc849ca31cfed' } -ErrorAction Stop; $r | ConvertTo-Json } catch { \"HTTP $\\($_.Exception.Response.StatusCode.value__\\): $\\($_.Exception.Message\\)\" })",
+      "PowerShell(\"---\")",
+      "PowerShell(\"== �cron/sync.ts est� trackeado? ==\")",
+      "PowerShell(\"== estado de archivos que tocamos ==\")",
+      "PowerShell(\"== �la rama local est� adelantada del remoto? ==\")",
+      "PowerShell(try { $r = Invoke-RestMethod -Method Post -Uri 'https://polla-cachorraos.vercel.app/api/cron/sync' -Headers @{ Authorization = 'Bearer 35dda9f0b7c1c433cc1127a9981195733d5fc849ca31cfed' } -ErrorAction Stop; \"OK -> \" + \\($r | ConvertTo-Json -Compress\\) } catch { \"Todavia HTTP $\\($_.Exception.Response.StatusCode.value__\\) \\(falta crear CRON_SECRET + redeploy\\)\" })",
+      "PowerShell(try { $r = Invoke-RestMethod -Method Post -Uri 'https://polla-cachorraos.vercel.app/api/cron/sync' -Headers @{ Authorization = 'Bearer 35dda9f0b7c1c433cc1127a9981195733d5fc849ca31cfed' } -ErrorAction Stop; \"OK -> \" + \\($r | ConvertTo-Json -Compress\\) } catch { \"HTTP $\\($_.Exception.Response.StatusCode.value__\\) -> aun no\" })",
+      "Bash(npm run *)",
+      "Bash(npx astro *)",
+      "Bash(supabase --version)",
+      "Bash(psql --version)",
+      "Bash(npx --no-install supabase --version)"
     ]
   }
 }
