@@ -45,6 +45,13 @@ const matches = ((pmData as any[]) ?? [])
 const finishedMatches = matches.filter((m) => m.status === 'finished');
 const allFinished = matches.length > 0 && finishedMatches.length === matches.length;
 
+// Partidos que ya tienen un resultado para puntuar: finalizados + en vivo con marcador.
+// Los en vivo cuentan de forma PROVISIONAL (cambian con cada sync).
+const scoredMatches = matches.filter(
+  (m) => m.status === 'finished' || (m.status === 'live' && m.home_score != null && m.away_score != null)
+);
+const hasLive = scoredMatches.some((m) => m.status === 'live');
+
 // Días distintos (UTC-5) para el filtro del desplegable.
 const matchDays = distinctDays(matches.map((m) => m.match_date));
 // Por defecto el filtro arranca en el día de hoy si tiene partidos; si no, en "todos".
@@ -96,9 +103,10 @@ function computeRanking(matchIds: Set<string>): Row[] {
   );
 }
 
-// Ranking acumulado de la polla: sobre todos los partidos finalizados.
+// Ranking de la polla: cuenta finalizados + en vivo (puntos provisionales).
 const finishedIds = new Set(finishedMatches.map((m) => m.id));
-const ranking = computeRanking(finishedIds);
+const countedIds = new Set(scoredMatches.map((m) => m.id));
+const ranking = computeRanking(countedIds);
 
 // --- Probabilidad de ganar (simulación Monte Carlo sobre partidos pendientes) ---
 // Usa los pronósticos ACTUALES de cada miembro; si no pronosticó, suma 0 en ese partido.
@@ -136,7 +144,14 @@ if (hasPending) {
 
   const N = 10000;
   const LAMBDA = 1.35;
-  const base = new Map(ranking.map((r) => [r.user_id, { pts: r.total_points, exact: r.correct_exact }]));
+  // Base = solo partidos finalizados. Los partidos en vivo y próximos se simulan
+  // como pendientes, así que NO se incluyen aquí (evita contarlos dos veces).
+  const base = new Map(ranking.map((r) => [r.user_id, { pts: 0, exact: 0 }]));
+  for (const p of allPreds) {
+    if (!finishedIds.has(p.match_id)) continue;
+    const b = base.get(p.user_id);
+    if (b) { b.pts += p.points_earned; if (p.points_earned === 5) b.exact++; }
+  }
   const credit = new Map(ranking.map((r) => [r.user_id, 0]));
 
   for (let s = 0; s < N; s++) {
@@ -363,9 +378,14 @@ const medal = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '�
 
     <div class="mt-1 flex flex-wrap items-center justify-between gap-2">
       <p class="text-sm text-gray-500">
-        Puntos acumulados sobre los {finishedMatches.length} partidos finalizados · desempate por exactos.
+        Puntos sobre {scoredMatches.length} partidos con resultado{hasLive ? ' (incluye en vivo, provisionales)' : ''} · desempate por exactos.
         {hasPending && ' El % es la probabilidad estimada de quedar 1ro según los pronósticos actuales (0% = ya no puede ganar).'}
       </p>
+      {hasLive && (
+        <span class="inline-flex items-center gap-1 rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-600">
+          <span class="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500"></span> En vivo
+        </span>
+      )}
       {allFinished && ranking.length > 0 && (
         <span class="rounded-full bg-polla-gold px-3 py-1 text-xs font-bold text-polla-blue">
           🏆 Ganador: {ranking[0].username}
@@ -506,4 +526,23 @@ const medal = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '�
       });
     })();
   </script>
+
+  {hasLive && (
+    <script is:inline>
+      // Auto-refresco mientras hay partidos en vivo: recarga cada 60s para mostrar
+      // los puntos provisionales actualizados, sin interrumpir si estás editando.
+      (() => {
+        let dirty = false;
+        const form = document.querySelector('form[action="/api/predictions-batch"]');
+        if (form) form.addEventListener('input', () => { dirty = true; });
+        setInterval(() => {
+          const active = document.activeElement;
+          const editing = active && active.tagName === 'INPUT';
+          const modalOpen = document.querySelector('dialog[open]');
+          if (dirty || editing || modalOpen) return; // no interrumpir al usuario
+          location.reload();
+        }, 60000);
+      })();
+    </script>
+  )}
 </Layout>
