@@ -23,16 +23,16 @@ const finished = m.status === 'finished';
 <Layout title="Pronósticos del partido · Admin">
   <a href="/admin" class="text-sm font-semibold text-polla-blue hover:underline">← Volver al panel</a>
 
-  <h1 class="mt-2 text-2xl font-extrabold text-polla-blue">{m.home_team} vs {m.away_team}</h1>
+  <h1 class="animate-rise mt-2 text-2xl font-black text-polla-blue sm:text-3xl">{m.home_team} vs {m.away_team}</h1>
   <p class="mt-1 text-sm text-gray-500">
     {statusLabel[m.status]} · {formatDate(m.match_date)}
     {finished && <strong class="ml-2 text-gray-700">Resultado: {m.home_score} – {m.away_score}</strong>}
   </p>
 
-  <div class="mt-6 overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+  <div class="card mt-6 overflow-x-auto p-0">
     <table class="w-full text-sm">
       <thead>
-        <tr class="bg-polla-blue text-left text-white">
+        <tr class="bg-brand text-left text-white">
           <th class="px-4 py-3">Jugador</th>
           <th class="px-4 py-3">Polla</th>
           <th class="px-4 py-3 text-center">Pronóstico</th>

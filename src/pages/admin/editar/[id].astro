@@ -22,11 +22,11 @@ const statuses: { value: Match['status']; label: string }[] = [
 
 <Layout title="Editar partido · Admin">
   <a href="/admin" class="text-sm font-semibold text-polla-blue hover:underline">← Volver al panel</a>
-  <h1 class="mt-2 text-2xl font-extrabold text-polla-blue">Editar partido</h1>
+  <h1 class="animate-rise mt-2 text-2xl font-black text-polla-blue sm:text-3xl">Editar partido</h1>
 
   {error && <p class="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
-  <form method="POST" action="/api/admin/match-update" class="mt-6 grid gap-3 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:grid-cols-2">
+  <form method="POST" action="/api/admin/match-update" class="card mt-6 grid gap-3 p-6 sm:grid-cols-2">
     <input type="hidden" name="match_id" value={m.id} />
 
     <div>
@@ -81,7 +81,7 @@ const statuses: { value: Match['status']; label: string }[] = [
     </p>
 
     <div class="flex gap-3 sm:col-span-2">
-      <button class="rounded-lg bg-polla-green px-5 py-2.5 font-semibold text-white transition hover:brightness-110">
+      <button class="btn-shine rounded-xl bg-polla-green px-5 py-2.5 font-semibold text-white shadow-md shadow-pino/20 transition hover:brightness-110">
         Guardar cambios
       </button>
       <a href="/admin" class="rounded-lg border border-gray-300 px-5 py-2.5 font-semibold text-gray-700 transition hover:bg-gray-50">
