@@ -59,8 +59,8 @@ async function main() {
     stage: STAGE_ES[m.stage] ?? m.stage ?? 'Fase de grupos',
     round: m.matchday ? `Jornada ${m.matchday}` : m.group ?? null,
     status: mapStatus(m.status),
-    home_score: m.score?.fullTime?.home ?? null,
-    away_score: m.score?.fullTime?.away ?? null,
+    home_score: m.score?.regularTime?.home ?? m.score?.fullTime?.home ?? null,
+    away_score: m.score?.regularTime?.away ?? m.score?.fullTime?.away ?? null,
   }));
 
   if (rows.length === 0) {
