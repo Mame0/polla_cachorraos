@@ -37,6 +37,43 @@ const STAGE_ES = {
   FINAL: 'Final',
 };
 
+function getRegularTimeScore(score) {
+  if (!score) return { home: null, away: null };
+
+  if (
+    score.regularTime?.home !== undefined && score.regularTime?.home !== null &&
+    score.regularTime?.away !== undefined && score.regularTime?.away !== null
+  ) {
+    return { home: score.regularTime.home, away: score.regularTime.away };
+  }
+
+  if (
+    score.fullTime?.home !== undefined && score.fullTime?.home !== null &&
+    score.fullTime?.away !== undefined && score.fullTime?.away !== null
+  ) {
+    let home = score.fullTime.home;
+    let away = score.fullTime.away;
+
+    if (score.penalties?.home !== undefined && score.penalties?.home !== null) {
+      home -= score.penalties.home;
+    }
+    if (score.penalties?.away !== undefined && score.penalties?.away !== null) {
+      away -= score.penalties.away;
+    }
+
+    if (score.extraTime?.home !== undefined && score.extraTime?.home !== null) {
+      home -= score.extraTime.home;
+    }
+    if (score.extraTime?.away !== undefined && score.extraTime?.away !== null) {
+      away -= score.extraTime.away;
+    }
+
+    return { home, away };
+  }
+
+  return { home: null, away: null };
+}
+
 const mapStatus = (s) =>
   s === 'FINISHED' ? 'finished' : ['IN_PLAY', 'PAUSED', 'SUSPENDED'].includes(s) ? 'live' : 'upcoming';
 
@@ -51,17 +88,20 @@ async function main() {
   }
 
   const { matches = [] } = await res.json();
-  const rows = matches.map((m) => ({
-    external_id: String(m.id),
-    home_team: m.homeTeam?.name ?? m.homeTeam?.shortName ?? 'Por definir',
-    away_team: m.awayTeam?.name ?? m.awayTeam?.shortName ?? 'Por definir',
-    match_date: m.utcDate,
-    stage: STAGE_ES[m.stage] ?? m.stage ?? 'Fase de grupos',
-    round: m.matchday ? `Jornada ${m.matchday}` : m.group ?? null,
-    status: mapStatus(m.status),
-    home_score: m.score?.regularTime?.home ?? m.score?.fullTime?.home ?? null,
-    away_score: m.score?.regularTime?.away ?? m.score?.fullTime?.away ?? null,
-  }));
+  const rows = matches.map((m) => {
+    const { home, away } = getRegularTimeScore(m.score);
+    return {
+      external_id: String(m.id),
+      home_team: m.homeTeam?.name ?? m.homeTeam?.shortName ?? 'Por definir',
+      away_team: m.awayTeam?.name ?? m.awayTeam?.shortName ?? 'Por definir',
+      match_date: m.utcDate,
+      stage: STAGE_ES[m.stage] ?? m.stage ?? 'Fase de grupos',
+      round: m.matchday ? `Jornada ${m.matchday}` : m.group ?? null,
+      status: mapStatus(m.status),
+      home_score: home,
+      away_score: away,
+    };
+  });
 
   if (rows.length === 0) {
     console.log('La API no devolvió partidos.');

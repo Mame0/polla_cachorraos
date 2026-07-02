@@ -32,6 +32,43 @@ function mapStatus(s: string): FixtureRow['status'] {
   return 'upcoming';
 }
 
+function getRegularTimeScore(score: any): { home: number | null; away: number | null } {
+  if (!score) return { home: null, away: null };
+
+  if (
+    score.regularTime?.home !== undefined && score.regularTime?.home !== null &&
+    score.regularTime?.away !== undefined && score.regularTime?.away !== null
+  ) {
+    return { home: score.regularTime.home, away: score.regularTime.away };
+  }
+
+  if (
+    score.fullTime?.home !== undefined && score.fullTime?.home !== null &&
+    score.fullTime?.away !== undefined && score.fullTime?.away !== null
+  ) {
+    let home = score.fullTime.home;
+    let away = score.fullTime.away;
+
+    if (score.penalties?.home !== undefined && score.penalties?.home !== null) {
+      home -= score.penalties.home;
+    }
+    if (score.penalties?.away !== undefined && score.penalties?.away !== null) {
+      away -= score.penalties.away;
+    }
+
+    if (score.extraTime?.home !== undefined && score.extraTime?.home !== null) {
+      home -= score.extraTime.home;
+    }
+    if (score.extraTime?.away !== undefined && score.extraTime?.away !== null) {
+      away -= score.extraTime.away;
+    }
+
+    return { home, away };
+  }
+
+  return { home: null, away: null };
+}
+
 /** Trae los partidos de una competición y los deja listos para upsert en Supabase. */
 export async function fetchFixture(token: string, competition = 'WC'): Promise<FixtureRow[]> {
   const res = await fetch(`https://api.football-data.org/v4/competitions/${competition}/matches`, {
@@ -44,15 +81,18 @@ export async function fetchFixture(token: string, competition = 'WC'): Promise<F
   }
 
   const data = (await res.json()) as { matches?: any[] };
-  return (data.matches ?? []).map((m): FixtureRow => ({
-    external_id: String(m.id),
-    home_team: m.homeTeam?.name ?? m.homeTeam?.shortName ?? 'Por definir',
-    away_team: m.awayTeam?.name ?? m.awayTeam?.shortName ?? 'Por definir',
-    match_date: m.utcDate,
-    stage: STAGE_ES[m.stage] ?? m.stage ?? 'Fase de grupos',
-    round: m.matchday ? `Jornada ${m.matchday}` : m.group ?? null,
-    status: mapStatus(m.status),
-    home_score: m.score?.regularTime?.home ?? m.score?.fullTime?.home ?? null,
-    away_score: m.score?.regularTime?.away ?? m.score?.fullTime?.away ?? null,
-  }));
+  return (data.matches ?? []).map((m): FixtureRow => {
+    const { home, away } = getRegularTimeScore(m.score);
+    return {
+      external_id: String(m.id),
+      home_team: m.homeTeam?.name ?? m.homeTeam?.shortName ?? 'Por definir',
+      away_team: m.awayTeam?.name ?? m.awayTeam?.shortName ?? 'Por definir',
+      match_date: m.utcDate,
+      stage: STAGE_ES[m.stage] ?? m.stage ?? 'Fase de grupos',
+      round: m.matchday ? `Jornada ${m.matchday}` : m.group ?? null,
+      status: mapStatus(m.status),
+      home_score: home,
+      away_score: away,
+    };
+  });
 }
