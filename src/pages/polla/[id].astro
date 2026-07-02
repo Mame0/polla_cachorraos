@@ -225,17 +225,17 @@ const medal = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '�
   </div>
 
   <div class="mt-4 grid gap-4 sm:grid-cols-3">
-    <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div class="card p-5">
       <p class="text-sm text-gray-500">Monto por persona</p>
-      <p class="mt-1 text-2xl font-extrabold text-polla-blue">{formatMoney(poll.entry_amount)}</p>
+      <p class="mt-1 text-2xl font-black text-polla-blue">{formatMoney(poll.entry_amount)}</p>
     </div>
-    <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div class="card p-5">
       <p class="text-sm text-gray-500">Participantes</p>
-      <p class="mt-1 text-2xl font-extrabold text-gray-700">{memberCount}</p>
+      <p class="mt-1 text-2xl font-black text-azul-real">{memberCount}</p>
     </div>
-    <div class="rounded-2xl border border-polla-green/30 bg-polla-green-light p-5 shadow-sm">
-      <p class="text-sm text-polla-green">Bote total</p>
-      <p class="mt-1 text-2xl font-extrabold text-polla-green">{formatMoney(boteTotal)}</p>
+    <div class="bg-brand rounded-2xl p-5 text-white shadow-lg shadow-marino/20">
+      <p class="text-sm text-white/80">Bote total 🏆</p>
+      <p class="mt-1 text-2xl font-black text-polla-gold">{formatMoney(boteTotal)}</p>
     </div>
   </div>
 
@@ -405,7 +405,7 @@ const medal = (i: number) => (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '�
     <div class="mt-4 overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
       <table class="w-full text-sm">
         <thead>
-          <tr class="bg-polla-blue text-left text-white">
+          <tr class="bg-brand text-left text-white">
             <th class="px-4 py-3">#</th>
             <th class="px-4 py-3">Jugador</th>
             <th class="px-4 py-3 text-center">Pts</th>

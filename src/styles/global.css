@@ -1,16 +1,118 @@
 @import "tailwindcss";
 
 @theme {
-  --color-polla-green: #1a5c2a;
-  --color-polla-green-light: #d6f0dd;
-  --color-polla-blue: #1a3c6e;
-  --color-polla-blue-light: #d6e4f7;
-  --color-polla-gold: #ffd700;
+  /* ===== Marca (mapea los tokens existentes a la nueva paleta) ===== */
+  /* Azul Marino — base de marca (cabecera, títulos, acciones primarias) */
+  --color-polla-blue: #172674;
+  --color-polla-blue-light: #e7ebff;
+  /* Verde Pino — acciones de éxito / crear / guardar (texto blanco AA) */
+  --color-polla-green: #004838;
+  --color-polla-green-light: #d8f6e6;
+  /* Amarillo Neón — acento / resaltes */
+  --color-polla-gold: #ebff3d;
+
+  /* ===== Paleta completa (disponible como bg, text y border) ===== */
+  /* Fila 1 — Tonos oscuros base */
+  --color-guinda: #5c1013;
+  --color-morado: #5f00f5;
+  --color-marino: #172674;
+  --color-pino: #004838;
+  /* Fila 2 — Tonos medios / vibrantes */
+  --color-rojo: #e50000;
+  --color-lavanda: #9f7cff;
+  --color-azul-real: #2153ff;
+  --color-esmeralda: #00c24b;
+  /* Fila 3 — Tonos brillantes */
+  --color-naranja: #ff4600;
+  --color-orquidea: #ba62c5;
+  --color-celeste: #20a4ff;
+  --color-lima: #a2e600;
+  /* Fila 4 — Tonos pastel / neón */
+  --color-coral: #ff9e80;
+  --color-fucsia: #e61a5f;
+  --color-cian: #49ffe6;
+  --color-amarillo: #ebff3d;
 }
 
 html {
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  background-color: #f4f6f9;
+  /* Fondo suave con un toque de la paleta marino/lavanda */
+  background-color: #f4f6fc;
+  background-image:
+    radial-gradient(1200px 600px at 110% -10%, rgba(95, 0, 245, 0.07), transparent 60%),
+    radial-gradient(1000px 500px at -10% 0%, rgba(33, 83, 255, 0.06), transparent 55%);
+  background-attachment: fixed;
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ===== Gradientes de marca reutilizables ===== */
+.bg-brand {
+  background-image: linear-gradient(120deg, #172674 0%, #2153ff 55%, #5f00f5 100%);
+}
+.bg-brand-soft {
+  background-image: linear-gradient(135deg, #172674 0%, #5f00f5 120%);
+}
+.text-brand-gradient {
+  background-image: linear-gradient(100deg, #172674, #2153ff 45%, #5f00f5);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ===== Realce neón fino (línea / borde) ===== */
+.neon-line {
+  background-image: linear-gradient(90deg, #ebff3d, #49ffe6 35%, #20a4ff 65%, #5f00f5);
+}
+
+/* ===== Tarjetas: elevación y hover suave ===== */
+.card {
+  background: #fff;
+  border: 1px solid rgb(23 38 116 / 0.08);
+  border-radius: 1rem;
+  box-shadow:
+    0 1px 2px rgb(23 38 116 / 0.04),
+    0 8px 24px -12px rgb(23 38 116 / 0.18);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.card-hover:hover {
+  transform: translateY(-3px);
+  border-color: rgb(33 83 255 / 0.35);
+  box-shadow:
+    0 2px 4px rgb(23 38 116 / 0.06),
+    0 18px 40px -16px rgb(23 38 116 / 0.32);
+}
+
+/* ===== Botón con brillo al pasar el cursor ===== */
+.btn-shine {
+  position: relative;
+  overflow: hidden;
+}
+.btn-shine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 25%, rgba(255, 255, 255, 0.35) 50%, transparent 75%);
+  transform: translateX(-120%);
+  transition: transform 0.6s ease;
+}
+.btn-shine:hover::after {
+  transform: translateX(120%);
+}
+
+/* Animación de entrada sutil para secciones */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-rise {
+  animation: rise 0.45s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .animate-rise, .btn-shine::after, .card { animation: none; transition: none; }
 }
 
 /* Quita las flechas de los inputs numéricos de marcador */
@@ -21,4 +123,9 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 input[type="number"] {
   -moz-appearance: textfield;
+}
+
+/* Selección de texto con color de marca */
+::selection {
+  background: rgba(95, 0, 245, 0.18);
 }

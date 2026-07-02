@@ -27,7 +27,7 @@ for (const m of matches) {
 
 <Layout title="Crear polla · Polla Cachorraos">
   <a href="/" class="text-sm font-semibold text-polla-blue hover:underline">← Volver al inicio</a>
-  <h1 class="mt-2 text-2xl font-extrabold text-polla-blue">Crear una polla</h1>
+  <h1 class="animate-rise mt-2 text-2xl font-black text-polla-blue sm:text-3xl">Crear una polla</h1>
   <p class="mt-1 text-sm text-gray-500">
     Elige los partidos, define el monto por persona y comparte la polla con tus amigos.
   </p>
@@ -40,7 +40,7 @@ for (const m of matches) {
     </p>
   ) : (
     <form method="POST" action="/api/polls/create" class="mt-6 space-y-6">
-      <div class="sticky top-0 z-10 -mx-4 grid gap-4 border-b border-gray-200 bg-gray-50/95 px-4 py-3 backdrop-blur sm:grid-cols-[1fr_auto_auto] sm:items-end">
+      <div class="sticky top-[60px] z-10 -mx-4 grid gap-4 rounded-2xl border border-marino/10 bg-white/85 px-4 py-3 shadow-sm shadow-marino/10 backdrop-blur sm:grid-cols-[1fr_auto_auto] sm:items-end">
         <div>
           <label class="block text-sm font-semibold text-gray-700">Nombre de la polla</label>
           <input
@@ -56,7 +56,7 @@ for (const m of matches) {
             class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-polla-blue focus:outline-none focus:ring-2 focus:ring-polla-blue/30 sm:w-36"
           />
         </div>
-        <button class="rounded-lg bg-polla-green px-6 py-2 text-sm font-semibold text-white transition hover:brightness-110">
+        <button class="btn-shine rounded-xl bg-polla-green px-6 py-2 text-sm font-semibold text-white shadow-md shadow-pino/20 transition hover:brightness-110">
           Crear polla
         </button>
       </div>
@@ -73,8 +73,8 @@ for (const m of matches) {
                 const homeFlag = getTeamFlagUrl(m.home_team);
                 const awayFlag = getTeamFlagUrl(m.away_team);
                 return (
-                  <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm transition hover:border-polla-blue/50">
-                    <input type="checkbox" name="match_ids" value={m.id} class="h-4 w-4 accent-polla-green" />
+                  <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-marino/10 bg-white p-3 shadow-sm transition hover:border-azul-real/40 hover:shadow-md has-[:checked]:border-azul-real/60 has-[:checked]:bg-polla-blue-light/50">
+                    <input type="checkbox" name="match_ids" value={m.id} class="h-4 w-4 accent-azul-real" />
                     <span class="flex-1 flex flex-wrap items-center gap-1.5 font-medium">
                       {homeFlag && <img src={homeFlag} class="h-3.5 w-5 rounded border border-gray-100 object-cover shadow-xs" alt="" />}
                       <span>{m.home_team}</span>
